@@ -146,6 +146,23 @@ class OryxCmd(cmd.Cmd):
         super().__init__()
 
     def do_add_source(self, line):
+        """
+        add_source NAME URL
+
+        Register a new source from which images may be fetched.
+
+        Arguments:
+
+            NAME    An identifier which may be used to reference this source in
+                    future commands.
+
+            URL     The root URL under which image archives may be found.
+
+        Example:
+
+            add_source oryx https://downloads.toganlabs.com/oryx/0.2/guests
+        """
+
         args = line.split()
         if len(args) != 2:
             log.error("Incorrect number of args!")
@@ -154,6 +171,20 @@ class OryxCmd(cmd.Cmd):
         self.sysmgr.add_source(name, url)
 
     def do_remove_source(self, line):
+        """
+        remove_source NAME
+
+        Remove a previously registered source.
+
+        Arguments:
+
+            NAME    The identifier of the source to remove.
+
+        Example:
+
+            remove_source oryx
+        """
+
         args = line.split()
         if len(args) != 1:
             log.error("Incorrect number of args!")
@@ -162,6 +193,24 @@ class OryxCmd(cmd.Cmd):
         self.sysmgr.remove_source(name)
 
     def do_add_guest(self, line):
+        """
+        add_guest NAME IMAGE CONFIG_PATH
+
+        Create a new guest container from an image.
+
+        Arguments:
+
+            NAME    An identifier which may be used to reference this source in
+                    future commands.
+
+            IMAGE   A fully-qualified reference to an image which is available
+                    from one of the sources which has been configured. The
+                    format of this reference is "<source>:<image name>".
+
+            CONFIG_PATH
+                    The path to a configuration file in JSON format which
+                    contains any settings to be applied for this guest.
+        """
         args = line.split()
         if len(args) != 3:
             log.error("Incorrect number of args!")
@@ -174,6 +223,15 @@ class OryxCmd(cmd.Cmd):
         self.sysmgr.add_guest(name, image, config)
 
     def do_remove_guest(self, line):
+        """
+        remove_guest NAME
+
+        Delete an existing guest container.
+
+        Arguments:
+
+            NAME    The identifier of the guest container to remove.
+        """
         args = line.split()
         if len(args) != 1:
             log.error("Incorrect number of args!")
@@ -183,6 +241,21 @@ class OryxCmd(cmd.Cmd):
         self.sysmgr.remove_guest(name)
 
     def do_reconfigure_guest(self, line):
+        """
+        reconfigure_guest NAME CONFIG_PATH
+
+        Replace the configuration of an existing guest container.
+
+        Arguments:
+
+            NAME    The identifier of the guest container to reconfigure.
+
+            CONFIG_PATH
+                    The path to a configuration file in JSON format which
+                    contains any settings to be applied for this guest. The
+                    settings in this file will replace all settings previously
+                    applied to the guest.
+        """
         args = line.split()
         if len(args) != 2:
             log.error("Incorrect number of args!")
@@ -195,6 +268,11 @@ class OryxCmd(cmd.Cmd):
         self.sysmgr.reconfigure_guest(name, config)
 
     def do_exit(self, line):
+        """
+        exit
+
+        Exit the interactive oryxcmd shell.
+        """
         return True
 
 if __name__ == '__main__':
