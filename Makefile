@@ -19,3 +19,6 @@ install: $(APPS)
 
 clean:
 	rm -rf bin
+
+version:
+	@echo $(PACKAGE_VERSION)
