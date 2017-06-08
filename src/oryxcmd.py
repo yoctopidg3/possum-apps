@@ -51,8 +51,9 @@ class OryxSysmgr:
         else:
             state['sources'] = {}
 
-        state['sources'][name] = {}
-        state['sources'][name]['url'] = url
+        state['sources'][name] = {
+                'url': url
+            }
         self._unlock_and_write_state(state)
 
     def remove_source(self, name):
