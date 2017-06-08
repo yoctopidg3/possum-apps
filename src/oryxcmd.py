@@ -66,6 +66,29 @@ class OryxSysmgr:
         del state['sources'][name]
         self._unlock_and_write_state(state)
 
+    def list_sources(self):
+        state = self._lock_and_read_state()
+        if "sources" not in state:
+            return
+
+        for name in state['sources']:
+            print(name)
+        self._unlock_and_write_state(state)
+
+    def show_source(self, name):
+        state = self._lock_and_read_state()
+        if "sources" not in state:
+            log.error("Source %s not defined!" % (name))
+            return
+        if name not in state['sources']:
+            log.error("Source %s not defined!" % (name))
+            return
+
+        data = {name: state['sources'][name]}
+        print(json.dumps(data, indent=4, sort_keys=True))
+
+        self._unlock_and_write_state(state)
+
     def add_guest(self, name, image, config):
         state = self._lock_and_read_state()
         if "guests" in state:
@@ -219,6 +242,49 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.remove_source(name)
+
+    def do_list_sources(self, line):
+        """
+        list_sources
+
+        List all currently registered sources.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            list_sources
+        """
+
+        args = line.split()
+        if len(args) != 0:
+            log.error("Incorrect number of args!")
+            return
+        self.sysmgr.list_sources()
+
+    def do_show_source(self, line):
+        """
+        show_source NAME
+
+        Show details of a previously registered source in JSON format.
+
+        Arguments:
+
+            NAME    The identifier of the source to show.
+
+        Example:
+
+            show_source oryx
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            log.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.show_source(name)
 
     def do_add_guest(self, line):
         """
