@@ -123,6 +123,8 @@ class OryxSysmgr:
             tf.extractall(rootfs_path)
         urllib.request.urlcleanup()
 
+        self._create_spec_file(name, local_path)
+
         guest = {}
         guest['image_name'] = image_name
         guest['image'] = image_config
@@ -195,6 +197,33 @@ class OryxSysmgr:
         subprocess.run(args, cwd=local_path, check=True)
 
         self._unlock_and_write_state(state)
+
+    def _create_spec_file(self, name, local_path):
+        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
+        spec_path = os.path.join(local_path, "config.json")
+        spec_file = open(spec_path, 'r+')
+        spec = json.load(spec_file)
+
+        # Add netns hook
+        if not "hooks" in spec:
+            spec['hooks'] = {}
+        if not "prestart" in spec["hooks"]:
+            spec['hooks']['prestart'] = []
+        netns_hook = {'path': '/usr/sbin/netns'}
+        spec['hooks']['prestart'].append(netns_hook)
+
+        # Make rootfs writable
+        spec['root']['readonly'] = False
+
+        # Set hostname to the container name
+        spec['hostname'] = name
+
+        # Write back the updated spec
+        spec_file.seek(0)
+        spec_file.truncate()
+        json.dump(spec, spec_file, indent=4)
+        spec_file.write("\n")
+        spec_file.close()
 
     def _lock_and_read_state(self):
         try:
