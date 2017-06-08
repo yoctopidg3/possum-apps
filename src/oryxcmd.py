@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import types
@@ -132,6 +133,21 @@ class OryxSysmgr:
             return
 
         state['guests'][name]['config'] = config
+        self._unlock_and_write_state(state)
+
+    def runc(self, name, runc_args):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            log.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            log.error("Guest %s not defined!" % (name))
+            return
+
+        local_path = os.path.join("/var/lib/oryx-guests", name)
+        args = ["runc"] + runc_args
+        subprocess.run(args, cwd=local_path, check=True)
+
         self._unlock_and_write_state(state)
 
     def _lock_and_read_state(self):
@@ -290,6 +306,34 @@ class OryxCmd(cmd.Cmd):
             config = json.load(fp)
 
         self.sysmgr.reconfigure_guest(name, config)
+
+    def do_runc(self, line):
+        """
+        runc NAME ARGS...
+
+        Execute 'runc' for an existing guest container. See the documentation of
+        'runc' for further details.
+
+        Arguments:
+
+            NAME    The identifier of the guest container for which 'runc' will
+                    be executed.
+
+            ARGS... Command line arguments passed through to the 'runc'
+                    application.
+
+        Example:
+
+            runc test spec
+        """
+        args = line.split()
+        if len(args) < 1:
+            log.error("Incorrect number of args!")
+            return
+        name = args[0]
+        runc_args = args[1:]
+
+        self.sysmgr.runc(name, runc_args)
 
     def do_version(self, line):
         """
