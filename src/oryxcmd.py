@@ -209,7 +209,8 @@ class OryxSysmgr:
     def _unlock_and_write_state(self, state):
         self.statefile.seek(0)
         self.statefile.truncate()
-        json.dump(state, self.statefile)
+        json.dump(state, self.statefile, indent=4)
+        self.statefile.write("\n")
         self.statefile.close()
 
 class OryxCmd(cmd.Cmd):
