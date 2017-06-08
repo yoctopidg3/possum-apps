@@ -25,7 +25,7 @@ PACKAGE_NAME := oryx-apps
 PACKAGE_VERSION := 0.1.0
 
 PREFIX := /usr/local
-bindir := $(PREFIX)/bin
+sbindir := $(PREFIX)/sbin
 
 APPS := bin/oryxcmd bin/oryx-guest-init
 
@@ -37,8 +37,8 @@ bin/%: src/%.py Makefile
 	chmod a+x $@
 
 install: $(APPS)
-	install -d "$(bindir)"
-	install -m 755 $(APPS) "$(bindir)"
+	install -d "$(sbindir)"
+	install -m 755 $(APPS) "$(sbindir)"
 
 clean:
 	rm -rf bin
