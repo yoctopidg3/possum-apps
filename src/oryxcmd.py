@@ -29,13 +29,14 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tarfile
 import types
 import urllib.request
 
 APP_NAME = "oryxcmd"
-VERSION = "0.0.1"
+VERSION_STRING = "%%VERSION_STRING%%"
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
@@ -50,7 +51,9 @@ class OryxSysmgr:
         else:
             state['sources'] = {}
 
-        state['sources'][name] = url
+        state['sources'][name] = {
+                'url': url
+            }
         self._unlock_and_write_state(state)
 
     def remove_source(self, name):
@@ -65,7 +68,29 @@ class OryxSysmgr:
         del state['sources'][name]
         self._unlock_and_write_state(state)
 
-    def add_guest(self, name, image, config):
+    def list_sources(self):
+        state = self._lock_and_read_state()
+        if "sources" not in state:
+            return
+
+        for name in state['sources']:
+            print(name)
+        self._unlock_and_write_state(state)
+
+    def show_source(self, name):
+        state = self._lock_and_read_state()
+        if "sources" not in state:
+            log.error("Source %s not defined!" % (name))
+            return
+        if name not in state['sources']:
+            log.error("Source %s not defined!" % (name))
+            return
+
+        print(json.dumps(state['sources'][name], indent=4, sort_keys=True))
+
+        self._unlock_and_write_state(state)
+
+    def add_guest(self, name, image):
         state = self._lock_and_read_state()
         if "guests" in state:
             if name in state['guests']:
@@ -83,30 +108,24 @@ class OryxSysmgr:
             log.error("Source %s not defined!" % (name))
             return
 
-        source_url = state['sources'][source_name]
-        image_root = os.path.join(source_url, 'guest', image_name)
-        image_url = os.path.join(image_root, "image.json")
+        source = state['sources'][source_name]
 
-        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
-        image_config = json.loads(image_json)
+        image_root = os.path.join(source['url'], 'guest', image_name)
+        image_config = self._get_image_config(image_root)
+
         rootfs_url = os.path.join(image_root, image_config['ARCHIVE'])
-
         local_path = os.path.join("/var/lib/oryx-guests", name)
-        rootfs_path = os.path.join(local_path, "rootfs")
+        self._install_rootfs(rootfs_url, local_path)
+        self._create_spec_file(name, local_path)
 
-        (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
-        with tarfile.open(rootfs_filename, mode="r:xz") as tf:
-            tf.extractall(rootfs_path)
-        urllib.request.urlcleanup()
+        state['guests'][name] = {
+                'image_name': image_name,
+                'image': image_config,
+                'source_name': source_name,
+                'source': source,
+                'path': local_path,
+            }
 
-        guest = {}
-        guest['image'] = image_config
-        guest['source_name'] = source_name
-        guest['source_url'] = source_url
-        guest['path'] = local_path
-        guest['config'] = config
-
-        state['guests'][name] = guest
         self._unlock_and_write_state(state)
 
     def remove_guest(self, name):
@@ -122,7 +141,16 @@ class OryxSysmgr:
         del state['guests'][name]
         self._unlock_and_write_state(state)
 
-    def reconfigure_guest(self, name, config):
+    def list_guests(self):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            return
+
+        for name in state['guests']:
+            print(name)
+        self._unlock_and_write_state(state)
+
+    def show_guest(self, name):
         state = self._lock_and_read_state()
         if "guests" not in state:
             log.error("Guest %s not defined!" % (name))
@@ -131,8 +159,65 @@ class OryxSysmgr:
             log.error("Guest %s not defined!" % (name))
             return
 
-        state['guests'][name]['config'] = config
+        print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
+
         self._unlock_and_write_state(state)
+
+    def runc(self, name, runc_args):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            log.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            log.error("Guest %s not defined!" % (name))
+            return
+
+        local_path = os.path.join("/var/lib/oryx-guests", name)
+        args = ["runc"] + runc_args
+        subprocess.run(args, cwd=local_path, check=True)
+
+        self._unlock_and_write_state(state)
+
+    def _get_image_config(self, image_root):
+        image_url = os.path.join(image_root, "image.json")
+
+        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
+        return json.loads(image_json)
+
+    def _install_rootfs(self, rootfs_url, local_path):
+        rootfs_path = os.path.join(local_path, "rootfs")
+
+        (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
+        with tarfile.open(rootfs_filename, mode="r:xz") as tf:
+            tf.extractall(rootfs_path)
+        urllib.request.urlcleanup()
+
+    def _create_spec_file(self, name, local_path):
+        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
+        spec_path = os.path.join(local_path, "config.json")
+        spec_file = open(spec_path, 'r+')
+        spec = json.load(spec_file)
+
+        # Add netns hook
+        if not "hooks" in spec:
+            spec['hooks'] = {}
+        if not "prestart" in spec["hooks"]:
+            spec['hooks']['prestart'] = []
+        netns_hook = {'path': '/usr/sbin/netns'}
+        spec['hooks']['prestart'].append(netns_hook)
+
+        # Make rootfs writable
+        spec['root']['readonly'] = False
+
+        # Set hostname to the container name
+        spec['hostname'] = name
+
+        # Write back the updated spec
+        spec_file.seek(0)
+        spec_file.truncate()
+        json.dump(spec, spec_file, indent=4)
+        spec_file.write("\n")
+        spec_file.close()
 
     def _lock_and_read_state(self):
         try:
@@ -147,11 +232,12 @@ class OryxSysmgr:
     def _unlock_and_write_state(self, state):
         self.statefile.seek(0)
         self.statefile.truncate()
-        json.dump(state, self.statefile)
+        json.dump(state, self.statefile, indent=4)
+        self.statefile.write("\n")
         self.statefile.close()
 
 class OryxCmd(cmd.Cmd):
-    intro = "Welcome to %s v%s" % (APP_NAME, VERSION)
+    intro = "Welcome to %s (%s)" % (APP_NAME, VERSION_STRING)
     prompt = "oryxcmd> "
     def __init__(self):
         self.sysmgr = OryxSysmgr()
@@ -204,9 +290,52 @@ class OryxCmd(cmd.Cmd):
         name = args[0]
         self.sysmgr.remove_source(name)
 
+    def do_list_sources(self, line):
+        """
+        list_sources
+
+        List all currently registered sources.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            list_sources
+        """
+
+        args = line.split()
+        if len(args) != 0:
+            log.error("Incorrect number of args!")
+            return
+        self.sysmgr.list_sources()
+
+    def do_show_source(self, line):
+        """
+        show_source NAME
+
+        Show details of a previously registered source in JSON format.
+
+        Arguments:
+
+            NAME    The identifier of the source to show.
+
+        Example:
+
+            show_source oryx
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            log.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.show_source(name)
+
     def do_add_guest(self, line):
         """
-        add_guest NAME IMAGE CONFIG_PATH
+        add_guest NAME IMAGE
 
         Create a new guest container from an image.
 
@@ -219,20 +348,17 @@ class OryxCmd(cmd.Cmd):
                     from one of the sources which has been configured. The
                     format of this reference is "<source>:<image name>".
 
-            CONFIG_PATH
-                    The path to a configuration file in JSON format which
-                    contains any settings to be applied for this guest.
+        Example:
+
+            add_guest test oryx:minimal
         """
         args = line.split()
-        if len(args) != 3:
+        if len(args) != 2:
             log.error("Incorrect number of args!")
             return
-        (name, image, config_path) = args
+        (name, image) = args
 
-        with open(config_path, 'r') as fp:
-            config = json.load(fp)
-
-        self.sysmgr.add_guest(name, image, config)
+        self.sysmgr.add_guest(name, image)
 
     def do_remove_guest(self, line):
         """
@@ -243,6 +369,10 @@ class OryxCmd(cmd.Cmd):
         Arguments:
 
             NAME    The identifier of the guest container to remove.
+
+        Example:
+
+            remove_guest test
         """
         args = line.split()
         if len(args) != 1:
@@ -252,32 +382,76 @@ class OryxCmd(cmd.Cmd):
 
         self.sysmgr.remove_guest(name)
 
-    def do_reconfigure_guest(self, line):
+    def do_list_guests(self, line):
         """
-        reconfigure_guest NAME CONFIG_PATH
+        list_sources
 
-        Replace the configuration of an existing guest container.
+        List all currently registered guests.
 
         Arguments:
 
-            NAME    The identifier of the guest container to reconfigure.
+            (none)
 
-            CONFIG_PATH
-                    The path to a configuration file in JSON format which
-                    contains any settings to be applied for this guest. The
-                    settings in this file will replace all settings previously
-                    applied to the guest.
+        Example:
+
+            list_guests
         """
+
         args = line.split()
-        if len(args) != 2:
+        if len(args) != 0:
             log.error("Incorrect number of args!")
             return
-        (name, config_path) = args
+        self.sysmgr.list_guests()
 
-        with open(config_path, 'r') as fp:
-            config = json.load(fp)
+    def do_show_guest(self, line):
+        """
+        show_guest NAME
 
-        self.sysmgr.reconfigure_guest(name, config)
+        Show details of a previously registered guest in JSON format.
+
+        Arguments:
+
+            NAME    The identifier of the guest to show.
+
+        Example:
+
+            show_guest test
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            log.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.show_guest(name)
+
+    def do_runc(self, line):
+        """
+        runc NAME ARGS...
+
+        Execute 'runc' for an existing guest container. See the documentation of
+        'runc' for further details.
+
+        Arguments:
+
+            NAME    The identifier of the guest container for which 'runc' will
+                    be executed.
+
+            ARGS... Command line arguments passed through to the 'runc'
+                    application.
+
+        Example:
+
+            runc test spec
+        """
+        args = line.split()
+        if len(args) < 1:
+            log.error("Incorrect number of args!")
+            return
+        name = args[0]
+        runc_args = args[1:]
+
+        self.sysmgr.runc(name, runc_args)
 
     def do_version(self, line):
         """
@@ -285,7 +459,7 @@ class OryxCmd(cmd.Cmd):
 
         Display version information.
         """
-        print("%s v%s" % (APP_NAME, VERSION))
+        print("%s (%s)" % (APP_NAME, VERSION_STRING))
 
     def do_exit(self, line):
         """
