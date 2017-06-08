@@ -23,6 +23,8 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import cmd
+import fcntl
 import json
 import logging
 import os
@@ -30,7 +32,7 @@ import shutil
 import sys
 import tarfile
 import types
-import urllib
+import urllib.request
 
 APP_NAME = "oryxcmd"
 VERSION = "0.0.1"
@@ -85,14 +87,17 @@ class OryxSysmgr:
         image_root = os.path.join(source_url, 'guest', image_name)
         image_url = os.path.join(image_root, "image.json")
 
-        image_config = json.load(urllib.request.urlopen(image_url))
+        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
+        image_config = json.loads(image_json)
         rootfs_url = os.path.join(image_root, image_config['ARCHIVE'])
 
         local_path = os.path.join("/var/lib/oryx-guests", name)
         rootfs_path = os.path.join(local_path, "rootfs")
-        with urllib.request.urlopen(rootfs_url) as fp:
-            rootfs_tarfile = tarfile.open(fileobj=fp, mode="r:xz")
-            rootfs_tarfile.extractall(rootfs_path)
+
+        (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
+        with tarfile.open(rootfs_filename, mode="r:xz") as tf:
+            tf.extractall(rootfs_path)
+        urllib.request.urlcleanup()
 
         guest = {}
         guest['image'] = image_config
@@ -130,9 +135,14 @@ class OryxSysmgr:
         self._unlock_and_write_state(state)
 
     def _lock_and_read_state(self):
-        self.statefile = open('/var/lib/oryx-guests/state', 'r+')
-        fcntl.lockf(self.statefile, fcntl.LOCK_EX)
-        return json.load(self.statefile)
+        try:
+            self.statefile = open('/var/lib/oryx-guests/state', 'r+')
+            fcntl.lockf(self.statefile, fcntl.LOCK_EX)
+            return json.load(self.statefile)
+        except:
+            self.statefile = open('/var/lib/oryx-guests/state', 'w')
+            fcntl.lockf(self.statefile, fcntl.LOCK_EX)
+            return {}
 
     def _unlock_and_write_state(self, state):
         self.statefile.seek(0)
@@ -189,7 +199,7 @@ class OryxCmd(cmd.Cmd):
         if len(args) != 1:
             log.error("Incorrect number of args!")
             return
-        name = arg
+        name = args[0]
         self.sysmgr.remove_source(name)
 
     def do_add_guest(self, line):
@@ -236,7 +246,7 @@ class OryxCmd(cmd.Cmd):
         if len(args) != 1:
             log.error("Incorrect number of args!")
             return
-        name = line
+        name = args[0]
 
         self.sysmgr.remove_guest(name)
 
@@ -277,7 +287,7 @@ class OryxCmd(cmd.Cmd):
 
 if __name__ == '__main__':
     oryxcmd = OryxCmd()
-    if len(sys.argv > 1):
+    if len(sys.argv) > 1:
         line = ' '.join(sys.argv[1:])
         oryxcmd.onecmd(line)
     else:
