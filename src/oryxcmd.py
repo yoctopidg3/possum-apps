@@ -158,6 +158,28 @@ class OryxSysmgr:
         state['guests'][name]['config'] = config
         self._unlock_and_write_state(state)
 
+    def list_guests(self):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            return
+
+        for name in state['guests']:
+            print(name)
+        self._unlock_and_write_state(state)
+
+    def show_guest(self, name):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            log.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            log.error("Guest %s not defined!" % (name))
+            return
+
+        print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
+
+        self._unlock_and_write_state(state)
+
     def runc(self, name, runc_args):
         state = self._lock_and_read_state()
         if "guests" not in state:
@@ -372,6 +394,49 @@ class OryxCmd(cmd.Cmd):
             config = json.load(fp)
 
         self.sysmgr.reconfigure_guest(name, config)
+
+    def do_list_guests(self, line):
+        """
+        list_sources
+
+        List all currently registered guests.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            list_guests
+        """
+
+        args = line.split()
+        if len(args) != 0:
+            log.error("Incorrect number of args!")
+            return
+        self.sysmgr.list_guests()
+
+    def do_show_guest(self, line):
+        """
+        show_guest NAME
+
+        Show details of a previously registered guest in JSON format.
+
+        Arguments:
+
+            NAME    The identifier of the guest to show.
+
+        Example:
+
+            show_guest test
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            log.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.show_guest(name)
 
     def do_runc(self, line):
         """
