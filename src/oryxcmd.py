@@ -124,6 +124,7 @@ class OryxSysmgr:
         urllib.request.urlcleanup()
 
         guest = {}
+        guest['image_name'] = image_name
         guest['image'] = image_config
         guest['source_name'] = source_name
         guest['source'] = source
