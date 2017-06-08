@@ -35,7 +35,7 @@ import types
 import urllib.request
 
 APP_NAME = "oryxcmd"
-VERSION = "0.0.1"
+VERSION_STRING = "%%VERSION_STRING%%"
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
@@ -151,7 +151,7 @@ class OryxSysmgr:
         self.statefile.close()
 
 class OryxCmd(cmd.Cmd):
-    intro = "Welcome to %s v%s" % (APP_NAME, VERSION)
+    intro = "Welcome to %s (%s)" % (APP_NAME, VERSION_STRING)
     prompt = "oryxcmd> "
     def __init__(self):
         self.sysmgr = OryxSysmgr()
@@ -285,7 +285,7 @@ class OryxCmd(cmd.Cmd):
 
         Display version information.
         """
-        print("%s v%s" % (APP_NAME, VERSION))
+        print("%s (%s)" % (APP_NAME, VERSION_STRING))
 
     def do_exit(self, line):
         """

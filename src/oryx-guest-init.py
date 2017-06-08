@@ -28,11 +28,11 @@ import os
 import sys
 
 APP_NAME = "oryx-guest-init"
-VERSION = "0.0.1"
+VERSION_STRING = "%%VERSION_STRING%%"
 
 log = logging.getLogger()
 log.setLevel(logging.DEBUG)
-log.info("%s v%s booting..." % (APP_NAME, VERSION))
+log.info("%s (%s) booting..." % (APP_NAME, VERSION_STRING))
 
 # For now we just spawn a login prompt
 args = ("login", )
