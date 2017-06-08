@@ -108,32 +108,24 @@ class OryxSysmgr:
             return
 
         source = state['sources'][source_name]
+
         image_root = os.path.join(source['url'], 'guest', image_name)
-        image_url = os.path.join(image_root, "image.json")
+        image_config = self._get_image_config(image_root)
 
-        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
-        image_config = json.loads(image_json)
         rootfs_url = os.path.join(image_root, image_config['ARCHIVE'])
-
         local_path = os.path.join("/var/lib/oryx-guests", name)
-        rootfs_path = os.path.join(local_path, "rootfs")
-
-        (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
-        with tarfile.open(rootfs_filename, mode="r:xz") as tf:
-            tf.extractall(rootfs_path)
-        urllib.request.urlcleanup()
-
+        self._install_rootfs(rootfs_url, local_path)
         self._create_spec_file(name, local_path)
 
-        guest = {}
-        guest['image_name'] = image_name
-        guest['image'] = image_config
-        guest['source_name'] = source_name
-        guest['source'] = source
-        guest['path'] = local_path
-        guest['config'] = config
+        state['guests'][name] = {
+                'image_name': image_name,
+                'image': image_config,
+                'source_name': source_name,
+                'source': source,
+                'path': local_path,
+                'config': config
+            }
 
-        state['guests'][name] = guest
         self._unlock_and_write_state(state)
 
     def remove_guest(self, name):
@@ -197,6 +189,20 @@ class OryxSysmgr:
         subprocess.run(args, cwd=local_path, check=True)
 
         self._unlock_and_write_state(state)
+
+    def _get_image_config(self, image_root):
+        image_url = os.path.join(image_root, "image.json")
+
+        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
+        return json.loads(image_json)
+
+    def _install_rootfs(self, rootfs_url, local_path):
+        rootfs_path = os.path.join(local_path, "rootfs")
+
+        (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
+        with tarfile.open(rootfs_filename, mode="r:xz") as tf:
+            tf.extractall(rootfs_path)
+        urllib.request.urlcleanup()
 
     def _create_spec_file(self, name, local_path):
         subprocess.run(["runc", "spec"], cwd=local_path, check=True)
