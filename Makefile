@@ -16,3 +16,6 @@ bin/%: src/%.py Makefile
 install: $(APPS)
 	install -d "$(bindir)"
 	install -m 755 $(APPS) "$(bindir)"
+
+clean:
+	rm -rf bin
