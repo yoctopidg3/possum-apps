@@ -222,6 +222,10 @@ class OryxCmd(cmd.Cmd):
             CONFIG_PATH
                     The path to a configuration file in JSON format which
                     contains any settings to be applied for this guest.
+
+        Example:
+
+            add_guest test oryx:minimal config.json
         """
         args = line.split()
         if len(args) != 3:
@@ -243,6 +247,10 @@ class OryxCmd(cmd.Cmd):
         Arguments:
 
             NAME    The identifier of the guest container to remove.
+
+        Example:
+
+            remove_guest test
         """
         args = line.split()
         if len(args) != 1:
@@ -267,6 +275,10 @@ class OryxCmd(cmd.Cmd):
                     contains any settings to be applied for this guest. The
                     settings in this file will replace all settings previously
                     applied to the guest.
+
+        Example:
+
+            reconfigure_guest test newconfig.json
         """
         args = line.split()
         if len(args) != 2:
