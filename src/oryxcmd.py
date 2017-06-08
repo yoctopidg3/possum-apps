@@ -51,7 +51,8 @@ class OryxSysmgr:
         else:
             state['sources'] = {}
 
-        state['sources'][name] = url
+        state['sources'][name] = {}
+        state['sources'][name]['url'] = url
         self._unlock_and_write_state(state)
 
     def remove_source(self, name):
@@ -84,8 +85,7 @@ class OryxSysmgr:
             log.error("Source %s not defined!" % (name))
             return
 
-        data = {name: state['sources'][name]}
-        print(json.dumps(data, indent=4, sort_keys=True))
+        print(json.dumps(state['sources'][name], indent=4, sort_keys=True))
 
         self._unlock_and_write_state(state)
 
@@ -107,8 +107,8 @@ class OryxSysmgr:
             log.error("Source %s not defined!" % (name))
             return
 
-        source_url = state['sources'][source_name]
-        image_root = os.path.join(source_url, 'guest', image_name)
+        source = state['sources'][source_name]
+        image_root = os.path.join(source['url'], 'guest', image_name)
         image_url = os.path.join(image_root, "image.json")
 
         image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
@@ -126,7 +126,7 @@ class OryxSysmgr:
         guest = {}
         guest['image'] = image_config
         guest['source_name'] = source_name
-        guest['source_url'] = source_url
+        guest['source'] = source
         guest['path'] = local_path
         guest['config'] = config
 
