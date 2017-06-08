@@ -151,6 +151,8 @@ class OryxSysmgr:
         self.statefile.close()
 
 class OryxCmd(cmd.Cmd):
+    intro = "Welcome to %s v%s" % (APP_NAME, VERSION)
+    prompt = "oryxcmd> "
     def __init__(self):
         self.sysmgr = OryxSysmgr()
         super().__init__()
@@ -277,6 +279,14 @@ class OryxCmd(cmd.Cmd):
 
         self.sysmgr.reconfigure_guest(name, config)
 
+    def do_version(self, line):
+        """
+        version
+
+        Display version information.
+        """
+        print("%s v%s" % (APP_NAME, VERSION))
+
     def do_exit(self, line):
         """
         exit
@@ -288,6 +298,11 @@ class OryxCmd(cmd.Cmd):
 if __name__ == '__main__':
     oryxcmd = OryxCmd()
     if len(sys.argv) > 1:
+        # Convert common option-style arguments into commands by stripping the
+        # leading '--'
+        if sys.argv[1] in ("--help", "--version"):
+            sys.argv[1] = sys.argv[1][2:]
+
         line = ' '.join(sys.argv[1:])
         oryxcmd.onecmd(line)
     else:
