@@ -90,7 +90,7 @@ class OryxSysmgr:
 
         self._unlock_and_write_state(state)
 
-    def add_guest(self, name, image, config):
+    def add_guest(self, name, image):
         state = self._lock_and_read_state()
         if "guests" in state:
             if name in state['guests']:
@@ -124,7 +124,6 @@ class OryxSysmgr:
                 'source_name': source_name,
                 'source': source,
                 'path': local_path,
-                'config': config
             }
 
         self._unlock_and_write_state(state)
@@ -140,18 +139,6 @@ class OryxSysmgr:
 
         shutil.rmtree(state['guests'][name]['path'])
         del state['guests'][name]
-        self._unlock_and_write_state(state)
-
-    def reconfigure_guest(self, name, config):
-        state = self._lock_and_read_state()
-        if "guests" not in state:
-            log.error("Guest %s not defined!" % (name))
-            return
-        if name not in state['guests']:
-            log.error("Guest %s not defined!" % (name))
-            return
-
-        state['guests'][name]['config'] = config
         self._unlock_and_write_state(state)
 
     def list_guests(self):
@@ -348,7 +335,7 @@ class OryxCmd(cmd.Cmd):
 
     def do_add_guest(self, line):
         """
-        add_guest NAME IMAGE CONFIG_PATH
+        add_guest NAME IMAGE
 
         Create a new guest container from an image.
 
@@ -361,24 +348,17 @@ class OryxCmd(cmd.Cmd):
                     from one of the sources which has been configured. The
                     format of this reference is "<source>:<image name>".
 
-            CONFIG_PATH
-                    The path to a configuration file in JSON format which
-                    contains any settings to be applied for this guest.
-
         Example:
 
-            add_guest test oryx:minimal config.json
+            add_guest test oryx:minimal
         """
         args = line.split()
-        if len(args) != 3:
+        if len(args) != 2:
             log.error("Incorrect number of args!")
             return
-        (name, image, config_path) = args
+        (name, image) = args
 
-        with open(config_path, 'r') as fp:
-            config = json.load(fp)
-
-        self.sysmgr.add_guest(name, image, config)
+        self.sysmgr.add_guest(name, image)
 
     def do_remove_guest(self, line):
         """
@@ -401,37 +381,6 @@ class OryxCmd(cmd.Cmd):
         name = args[0]
 
         self.sysmgr.remove_guest(name)
-
-    def do_reconfigure_guest(self, line):
-        """
-        reconfigure_guest NAME CONFIG_PATH
-
-        Replace the configuration of an existing guest container.
-
-        Arguments:
-
-            NAME    The identifier of the guest container to reconfigure.
-
-            CONFIG_PATH
-                    The path to a configuration file in JSON format which
-                    contains any settings to be applied for this guest. The
-                    settings in this file will replace all settings previously
-                    applied to the guest.
-
-        Example:
-
-            reconfigure_guest test newconfig.json
-        """
-        args = line.split()
-        if len(args) != 2:
-            log.error("Incorrect number of args!")
-            return
-        (name, config_path) = args
-
-        with open(config_path, 'r') as fp:
-            config = json.load(fp)
-
-        self.sysmgr.reconfigure_guest(name, config)
 
     def do_list_guests(self, line):
         """
