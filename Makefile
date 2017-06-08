@@ -37,8 +37,8 @@ bin/%: src/%.py Makefile
 	chmod a+x $@
 
 install: $(APPS)
-	install -d "$(sbindir)"
-	install -m 755 $(APPS) "$(sbindir)"
+	install -d "$(DESTDIR)$(sbindir)"
+	install -m 755 $(APPS) "$(DESTDIR)$(sbindir)"
 
 clean:
 	rm -rf bin
