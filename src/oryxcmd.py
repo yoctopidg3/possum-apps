@@ -494,10 +494,11 @@ if __name__ == '__main__':
 
     oryxcmd = OryxCmd()
     if len(sys.argv) > 1:
-        # Convert common option-style arguments into commands by stripping the
-        # leading '--'
-        if sys.argv[1] in ("--help", "--version"):
-            sys.argv[1] = sys.argv[1][2:]
+        # Convert common option-style arguments into commands
+        if sys.argv[1] in ("-h", "--help"):
+            sys.argv[1] = "help"
+        elif sys.argv[1] in ("-V", "--version"):
+            sys.argv[1] = "version"
 
         line = ' '.join(sys.argv[1:])
         oryxcmd.onecmd(line)
