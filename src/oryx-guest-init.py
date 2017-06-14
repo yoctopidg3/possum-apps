@@ -30,9 +30,11 @@ import sys
 APP_NAME = "oryx-guest-init"
 VERSION_STRING = "%%VERSION_STRING%%"
 
-log = logging.getLogger()
-log.setLevel(logging.DEBUG)
-log.info("%s (%s) booting..." % (APP_NAME, VERSION_STRING))
+# oryx-gues-init is a system service so make log messages explicit
+logging.basicConfig(level=logging.DEBUG,
+                    format="%(asctime)s oryx-guest-init[%(process)d]: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S %z")
+logging.info("Booting (%s)..." % (VERSION_STRING))
 
 # For now we just spawn a login prompt
 args = ("sh", )
@@ -46,8 +48,8 @@ while True:
     coredump = (status & 0x80) >> 7
     signal = status & 0x7F
     if pid == main_pid:
-        log.info("%s exiting...")
+        logging.info("Exiting...")
         sys.exit(exit_code)
     else:
-        log.debug("Reaped pid=%d, exit_code=%d, coredump=%d, signal=%d" %
-                (pid, exit_code, coredump, signal))
+        logging.debug("Reaped pid=%d, exit_code=%d, coredump=%d, signal=%d" %
+                      (pid, exit_code, coredump, signal))
