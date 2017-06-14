@@ -38,15 +38,12 @@ import urllib.request
 APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
-log = logging.getLogger()
-log.setLevel(logging.DEBUG)
-
 class OryxSysmgr:
     def add_source(self, name, url):
         state = self._lock_and_read_state()
         if "sources" in state:
             if name in state['sources']:
-                log.error("Source %s already defined!" % (name))
+                logging.error("Source %s already defined!" % (name))
                 return
         else:
             state['sources'] = {}
@@ -55,46 +52,47 @@ class OryxSysmgr:
                 'url': url
             }
         self._unlock_and_write_state(state)
+        logging.info("Added source \"%s\" with URL \"%s\"" % (name, url))
 
     def remove_source(self, name):
         state = self._lock_and_read_state()
         if "sources" not in state:
-            log.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!" % (name))
             return
         if name not in state['sources']:
-            log.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!" % (name))
             return
 
         del state['sources'][name]
         self._unlock_and_write_state(state)
+        logging.info("Removed source \"%s\"" % (name))
 
     def list_sources(self):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "sources" not in state:
             return
 
         for name in state['sources']:
             print(name)
-        self._unlock_and_write_state(state)
 
     def show_source(self, name):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "sources" not in state:
-            log.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!" % (name))
             return
         if name not in state['sources']:
-            log.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!" % (name))
             return
 
         print(json.dumps(state['sources'][name], indent=4, sort_keys=True))
-
-        self._unlock_and_write_state(state)
 
     def add_guest(self, name, image):
         state = self._lock_and_read_state()
         if "guests" in state:
             if name in state['guests']:
-                log.error("Guest %s already defined!" % (name))
+                logging.error("Guest %s already defined!" % (name))
                 return
         else:
             state['guests'] = {}
@@ -105,7 +103,7 @@ class OryxSysmgr:
         (source_name, image_name) = image.split(":")
 
         if source_name not in state['sources']:
-            log.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!" % (name))
             return
 
         source = state['sources'][source_name]
@@ -127,74 +125,80 @@ class OryxSysmgr:
             }
 
         self._unlock_and_write_state(state)
+        logging.info("Added guest \"%s\" from image \"%s\"" % (name, image))
 
     def remove_guest(self, name):
         state = self._lock_and_read_state()
         if "guests" not in state:
-            log.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!" % (name))
             return
         if name not in state['guests']:
-            log.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!" % (name))
             return
 
-        shutil.rmtree(state['guests'][name]['path'])
+        guest_path = state['guests'][name]['path']
+        logging.debug("Deleting data from \"%s\"..." % (guest_path))
+        shutil.rmtree(guest_path)
         del state['guests'][name]
         self._unlock_and_write_state(state)
+        logging.info("Removed guest \"%s\"" % (name))
 
     def list_guests(self):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "guests" not in state:
             return
 
         for name in state['guests']:
             print(name)
-        self._unlock_and_write_state(state)
 
     def show_guest(self, name):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "guests" not in state:
-            log.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!" % (name))
             return
         if name not in state['guests']:
-            log.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!" % (name))
             return
 
         print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
 
-        self._unlock_and_write_state(state)
-
     def runc(self, name, runc_args):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "guests" not in state:
-            log.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!" % (name))
             return
         if name not in state['guests']:
-            log.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!" % (name))
             return
 
         local_path = os.path.join("/var/lib/oryx-guests", name)
         args = ["runc"] + runc_args
         subprocess.run(args, cwd=local_path, check=True)
 
-        self._unlock_and_write_state(state)
-
     def _get_image_config(self, image_root):
         image_url = os.path.join(image_root, "image.json")
 
+        logging.debug("Retrieving \"%s\"..." % (image_url))
         image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
         return json.loads(image_json)
 
     def _install_rootfs(self, rootfs_url, local_path):
         rootfs_path = os.path.join(local_path, "rootfs")
 
+        logging.debug("Retrieving \"%s\"..." % (rootfs_url))
         (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
+        logging.debug("Extracting to \"%s\"..." % (rootfs_path))
         with tarfile.open(rootfs_filename, mode="r:xz") as tf:
             tf.extractall(rootfs_path)
         urllib.request.urlcleanup()
 
     def _create_spec_file(self, name, local_path):
-        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
         spec_path = os.path.join(local_path, "config.json")
+        logging.debug("Creating spec file \"%s\"..." % (spec_path))
+        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
         spec_file = open(spec_path, 'r+')
         spec = json.load(spec_file)
 
@@ -212,6 +216,9 @@ class OryxSysmgr:
         # Set hostname to the container name
         spec['hostname'] = name
 
+        # Use oryx-guest-init as PID 1 within the container
+        spec['process']['args'] = ['/sbin/oryx-guest-init']
+
         # Write back the updated spec
         spec_file.seek(0)
         spec_file.truncate()
@@ -221,19 +228,26 @@ class OryxSysmgr:
 
     def _lock_and_read_state(self):
         try:
+            logging.debug("Loading state...")
             self.statefile = open('/var/lib/oryx-guests/state', 'r+')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return json.load(self.statefile)
         except:
+            logging.debug("No existing state found. Creating blank state...")
             self.statefile = open('/var/lib/oryx-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return {}
 
     def _unlock_and_write_state(self, state):
+        logging.debug("Writing back state...")
         self.statefile.seek(0)
         self.statefile.truncate()
         json.dump(state, self.statefile, indent=4)
         self.statefile.write("\n")
+        self.statefile.close()
+
+    def _unlock_and_discard_state(self):
+        logging.debug("Discarding state (read-only command)...")
         self.statefile.close()
 
 class OryxCmd(cmd.Cmd):
@@ -263,7 +277,7 @@ class OryxCmd(cmd.Cmd):
 
         args = line.split()
         if len(args) != 2:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         (name, url) = args
         self.sysmgr.add_source(name, url)
@@ -285,7 +299,7 @@ class OryxCmd(cmd.Cmd):
 
         args = line.split()
         if len(args) != 1:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         name = args[0]
         self.sysmgr.remove_source(name)
@@ -307,7 +321,7 @@ class OryxCmd(cmd.Cmd):
 
         args = line.split()
         if len(args) != 0:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         self.sysmgr.list_sources()
 
@@ -328,7 +342,7 @@ class OryxCmd(cmd.Cmd):
 
         args = line.split()
         if len(args) != 1:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         name = args[0]
         self.sysmgr.show_source(name)
@@ -354,7 +368,7 @@ class OryxCmd(cmd.Cmd):
         """
         args = line.split()
         if len(args) != 2:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         (name, image) = args
 
@@ -376,7 +390,7 @@ class OryxCmd(cmd.Cmd):
         """
         args = line.split()
         if len(args) != 1:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         name = args[0]
 
@@ -399,7 +413,7 @@ class OryxCmd(cmd.Cmd):
 
         args = line.split()
         if len(args) != 0:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         self.sysmgr.list_guests()
 
@@ -420,7 +434,7 @@ class OryxCmd(cmd.Cmd):
 
         args = line.split()
         if len(args) != 1:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         name = args[0]
         self.sysmgr.show_guest(name)
@@ -446,7 +460,7 @@ class OryxCmd(cmd.Cmd):
         """
         args = line.split()
         if len(args) < 1:
-            log.error("Incorrect number of args!")
+            logging.error("Incorrect number of args!")
             return
         name = args[0]
         runc_args = args[1:]
@@ -469,13 +483,31 @@ class OryxCmd(cmd.Cmd):
         """
         return True
 
+    def help_arguments(self):
+        print("Command Line Arguments:")
+        print("=======================")
+        print()
+        print("    -v/--verbose         Print verbose debug messages during operation")
+        print("    -h/--help [topic]    Print help and exit")
+        print("    -V/--version         Print version string and exit")
+
 if __name__ == '__main__':
+    # oryxcmd is typically used interactively so keep log messages simple
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    # Really dumb handling for '-v'/'--verbose' argument
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ("-v", "--verbose"):
+            logging.getLogger().setLevel(logging.DEBUG)
+            del sys.argv[1]
+
     oryxcmd = OryxCmd()
     if len(sys.argv) > 1:
-        # Convert common option-style arguments into commands by stripping the
-        # leading '--'
-        if sys.argv[1] in ("--help", "--version"):
-            sys.argv[1] = sys.argv[1][2:]
+        # Convert common option-style arguments into commands
+        if sys.argv[1] in ("-h", "--help"):
+            sys.argv[1] = "help"
+        elif sys.argv[1] in ("-V", "--version"):
+            sys.argv[1] = "version"
 
         line = ' '.join(sys.argv[1:])
         oryxcmd.onecmd(line)
