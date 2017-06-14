@@ -483,6 +483,14 @@ class OryxCmd(cmd.Cmd):
         """
         return True
 
+    def help_arguments(self):
+        print("Command Line Arguments:")
+        print("=======================")
+        print()
+        print("    -v/--verbose         Print verbose debug messages during operation")
+        print("    -h/--help [topic]    Print help and exit")
+        print("    -V/--version         Print version string and exit")
+
 if __name__ == '__main__':
     # oryxcmd is typically used interactively so keep log messages simple
     logging.basicConfig(level=logging.INFO, format="%(message)s")
