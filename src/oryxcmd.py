@@ -212,6 +212,9 @@ class OryxSysmgr:
         # Set hostname to the container name
         spec['hostname'] = name
 
+        # Use oryx-guest-init as PID 1 within the container
+        spec['process']['args'] = ['/sbin/oryx-guest-init']
+
         # Write back the updated spec
         spec_file.seek(0)
         spec_file.truncate()
