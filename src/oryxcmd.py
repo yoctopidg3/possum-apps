@@ -55,6 +55,7 @@ class OryxSysmgr:
                 'url': url
             }
         self._unlock_and_write_state(state)
+        logging.info("Added source \"%s\" with URL \"%s\"" % (name, url))
 
     def remove_source(self, name):
         state = self._lock_and_read_state()
@@ -67,6 +68,7 @@ class OryxSysmgr:
 
         del state['sources'][name]
         self._unlock_and_write_state(state)
+        logging.info("Removed source \"%s\"" % (name))
 
     def list_sources(self):
         state = self._lock_and_read_state()
@@ -127,6 +129,7 @@ class OryxSysmgr:
             }
 
         self._unlock_and_write_state(state)
+        logging.info("Added guest \"%s\" from image \"%s\"" % (name, image))
 
     def remove_guest(self, name):
         state = self._lock_and_read_state()
@@ -137,9 +140,12 @@ class OryxSysmgr:
             logging.error("Guest %s not defined!" % (name))
             return
 
-        shutil.rmtree(state['guests'][name]['path'])
+        guest_path = state['guests'][name]['path']
+        logging.debug("Deleting data from \"%s\"..." % (guest_path))
+        shutil.rmtree(guest_path)
         del state['guests'][name]
         self._unlock_and_write_state(state)
+        logging.info("Removed guest \"%s\"" % (name))
 
     def list_guests(self):
         state = self._lock_and_read_state()
@@ -181,20 +187,24 @@ class OryxSysmgr:
     def _get_image_config(self, image_root):
         image_url = os.path.join(image_root, "image.json")
 
+        logging.debug("Retrieving \"%s\"..." % (image_url))
         image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
         return json.loads(image_json)
 
     def _install_rootfs(self, rootfs_url, local_path):
         rootfs_path = os.path.join(local_path, "rootfs")
 
+        logging.debug("Retrieving \"%s\"..." % (rootfs_url))
         (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
+        logging.debug("Extracting to \"%s\"..." % (rootfs_path))
         with tarfile.open(rootfs_filename, mode="r:xz") as tf:
             tf.extractall(rootfs_path)
         urllib.request.urlcleanup()
 
     def _create_spec_file(self, name, local_path):
-        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
         spec_path = os.path.join(local_path, "config.json")
+        logging.debug("Creating spec file \"%s\"..." % (spec_path))
+        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
         spec_file = open(spec_path, 'r+')
         spec = json.load(spec_file)
 
@@ -224,15 +234,18 @@ class OryxSysmgr:
 
     def _lock_and_read_state(self):
         try:
+            logging.debug("Loading state...")
             self.statefile = open('/var/lib/oryx-guests/state', 'r+')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return json.load(self.statefile)
         except:
+            logging.debug("No existing state found. Creating blank state...")
             self.statefile = open('/var/lib/oryx-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return {}
 
     def _unlock_and_write_state(self, state):
+        logging.debug("Writing back state...")
         self.statefile.seek(0)
         self.statefile.truncate()
         json.dump(state, self.statefile, indent=4)
