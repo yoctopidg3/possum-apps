@@ -35,7 +35,7 @@ log.setLevel(logging.DEBUG)
 log.info("%s (%s) booting..." % (APP_NAME, VERSION_STRING))
 
 # For now we just spawn a login prompt
-args = ("login", )
+args = ("sh", )
 main_pid = os.spawnvp(os.P_NOWAIT, args[0], args)
 
 # Wait for our main command to finish whilst cleaning up other zombie
