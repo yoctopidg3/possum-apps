@@ -38,9 +38,6 @@ import urllib.request
 APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
-# oryxcmd is typically used interactively so keep log messages simple
-logging.basicConfig(level=logging.DEBUG, format="%(message)s")
-
 class OryxSysmgr:
     def add_source(self, name, url):
         state = self._lock_and_read_state()
@@ -486,6 +483,15 @@ class OryxCmd(cmd.Cmd):
         return True
 
 if __name__ == '__main__':
+    # oryxcmd is typically used interactively so keep log messages simple
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    # Really dumb handling for '-v'/'--verbose' argument
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ("-v", "--verbose"):
+            logging.getLogger().setLevel(logging.DEBUG)
+            del sys.argv[1]
+
     oryxcmd = OryxCmd()
     if len(sys.argv) > 1:
         # Convert common option-style arguments into commands by stripping the
