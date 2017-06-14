@@ -69,15 +69,16 @@ class OryxSysmgr:
 
     def list_sources(self):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "sources" not in state:
             return
 
         for name in state['sources']:
             print(name)
-        self._unlock_and_write_state(state)
 
     def show_source(self, name):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "sources" not in state:
             logging.error("Source %s not defined!" % (name))
             return
@@ -86,8 +87,6 @@ class OryxSysmgr:
             return
 
         print(json.dumps(state['sources'][name], indent=4, sort_keys=True))
-
-        self._unlock_and_write_state(state)
 
     def add_guest(self, name, image):
         state = self._lock_and_read_state()
@@ -146,15 +145,16 @@ class OryxSysmgr:
 
     def list_guests(self):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "guests" not in state:
             return
 
         for name in state['guests']:
             print(name)
-        self._unlock_and_write_state(state)
 
     def show_guest(self, name):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "guests" not in state:
             logging.error("Guest %s not defined!" % (name))
             return
@@ -164,10 +164,9 @@ class OryxSysmgr:
 
         print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
 
-        self._unlock_and_write_state(state)
-
     def runc(self, name, runc_args):
         state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
         if "guests" not in state:
             logging.error("Guest %s not defined!" % (name))
             return
@@ -178,8 +177,6 @@ class OryxSysmgr:
         local_path = os.path.join("/var/lib/oryx-guests", name)
         args = ["runc"] + runc_args
         subprocess.run(args, cwd=local_path, check=True)
-
-        self._unlock_and_write_state(state)
 
     def _get_image_config(self, image_root):
         image_url = os.path.join(image_root, "image.json")
@@ -247,6 +244,10 @@ class OryxSysmgr:
         self.statefile.truncate()
         json.dump(state, self.statefile, indent=4)
         self.statefile.write("\n")
+        self.statefile.close()
+
+    def _unlock_and_discard_state(self):
+        logging.debug("Discarding state (read-only command)...")
         self.statefile.close()
 
 class OryxCmd(cmd.Cmd):
