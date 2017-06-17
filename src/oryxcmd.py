@@ -234,6 +234,7 @@ class OryxSysmgr:
             return json.load(self.statefile)
         except:
             logging.debug("No existing state found. Creating blank state...")
+            os.makedirs("/var/lib/oryx-guests", exist_ok=True)
             self.statefile = open('/var/lib/oryx-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return {}
