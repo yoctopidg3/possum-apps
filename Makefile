@@ -22,7 +22,7 @@
 #
 
 PACKAGE_NAME := oryx-apps
-PACKAGE_VERSION := 0.1.0
+PACKAGE_VERSION := 0.1.1
 
 PREFIX := /usr/local
 sbindir := $(PREFIX)/sbin
