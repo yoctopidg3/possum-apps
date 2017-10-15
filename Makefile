@@ -27,7 +27,7 @@ PACKAGE_VERSION := 0.1.1
 PREFIX := /usr/local
 sbindir := $(PREFIX)/sbin
 
-APPS := bin/oryxcmd bin/oryx-guest-init
+APPS := bin/oryxcmd
 
 all: $(APPS)
 

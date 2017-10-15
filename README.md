@@ -14,14 +14,6 @@ more details, see the built-in help for this command by running:
 
     oryxcmd help
 
-oryx-guest-init
----------------
-
-This is a simple replacement init system for use in guest containers. It starts
-exactly one payload application and cleans up any zombie processes whilst this
-main payload application executes. Once the payload application exits, the guest
-container is shutdown.
-
 Contributing
 ============
 
