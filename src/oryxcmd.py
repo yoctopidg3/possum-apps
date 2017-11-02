@@ -28,6 +28,7 @@ import fcntl
 import json
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -114,7 +115,7 @@ class OryxSysmgr:
         rootfs_url = os.path.join(image_root, image_config['ARCHIVE'])
         local_path = os.path.join("/var/lib/oryx-guests", name)
         self._install_rootfs(rootfs_url, local_path)
-        self._create_spec_file(name, local_path)
+        self._create_spec_file(name, local_path, image_config['COMMAND'])
 
         state['guests'][name] = {
                 'image_name': image_name,
@@ -230,7 +231,7 @@ class OryxSysmgr:
             tf.extractall(rootfs_path)
         urllib.request.urlcleanup()
 
-    def _create_spec_file(self, name, local_path):
+    def _create_spec_file(self, name, local_path, command):
         spec_path = os.path.join(local_path, "config.json")
         logging.debug("Creating spec file \"%s\"..." % (spec_path))
         subprocess.run(["runc", "spec"], cwd=local_path, check=True)
@@ -252,8 +253,9 @@ class OryxSysmgr:
         spec['hostname'] = name
 
         # Use dumb-init as PID 1 within the container and have this program
-        # launch a shell
-        spec['process']['args'] = ['/sbin/dumb-init', '/bin/sh']
+        # launch the desired command
+        command_args = shlex.split(command)
+        spec['process']['args'] = ['/sbin/dumb-init'] + command_args
 
         # Write back the updated spec
         spec_file.seek(0)
