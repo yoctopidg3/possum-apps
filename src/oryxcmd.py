@@ -122,6 +122,7 @@ class OryxSysmgr:
                 'source_name': source_name,
                 'source': source,
                 'path': local_path,
+                'autostart_enabled': 0,
             }
 
         self._unlock_and_write_state(state)
@@ -163,6 +164,40 @@ class OryxSysmgr:
             return
 
         print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
+
+    def enable_guest(self, name):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if ['guests'][name]['autostart_enabled'] == 1:
+            logging.error("Guest %s already enabled!" % (name))
+            return
+
+        state['guests'][name]['autostart_enabled'] = 1
+
+        self._unlock_and_write_state(state)
+        logging.info("Enabled guest \"%s\"" % (name))
+
+    def disable_guest(self, name):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if ['guests'][name]['autostart_enabled'] == 0:
+            logging.error("Guest %s already disabled!" % (name))
+            return
+
+        state['guests'][name]['autostart_enabled'] = 0
+
+        self._unlock_and_write_state(state)
+        logging.info("Disabled guest \"%s\"" % (name))
 
     def runc(self, name, runc_args):
         state = self._lock_and_read_state()
@@ -440,6 +475,50 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.show_guest(name)
+
+    def do_enable_guest(self, line):
+        """
+        enable_guest NAME
+
+        Enable auto-start of a previously registered guest during system boot.
+
+        Arguments:
+
+            NAME    The identifier of the guest to enable.
+
+        Example:
+
+            enable_guest test
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.enable_guest(name)
+
+    def do_disable_guest(self, line):
+        """
+        disable_guest NAME
+
+        Disable auto-start of a previously registered guest during system boot.
+
+        Arguments:
+
+            NAME    The identifier of the guest to disable.
+
+        Example:
+
+            disable_guest test
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.disable_guest(name)
 
     def do_runc(self, line):
         """
