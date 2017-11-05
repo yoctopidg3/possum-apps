@@ -116,7 +116,7 @@ class OryxSysmgr:
             logging.error("Image \"%s\" is not a valid guest image!" % (image))
             return
 
-        rootfs_url = os.path.join(image_root, image_config['ARCHIVE'])
+        rootfs_url = os.path.join(image_root, image_config['ROOTFS'])
         local_path = os.path.join("/var/lib/oryx-guests", name)
         self._install_rootfs(rootfs_url, local_path)
         self._create_spec_file(name, local_path, image_config['COMMAND'])
