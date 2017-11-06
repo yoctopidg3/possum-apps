@@ -209,6 +209,22 @@ class OryxSysmgr:
         self.runc(name, runc_args)
         logging.info("Started guest \"%s\"" % (name))
 
+    def autostart_all(self):
+        state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
+        if "guests" not in state:
+            logging.info("No guests defined!")
+            return
+
+        for name in state['guests']:
+            if state['guests'][name]['autostart_enabled'] == 1:
+                try:
+                    self.start_guest(name)
+                except:
+                    logging.error("Failed to start guest \"%s\"" % (name))
+
+        logging.info("Autostart all enabled guests complete")
+
     def runc(self, name, runc_args):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
@@ -553,6 +569,26 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.start_guest(name)
+
+    def do_autostart_all(self, line):
+        """
+        autostart_all
+
+        Start all containers which have autostart enabled.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            autostart_all
+        """
+        args = line.split()
+        if len(args) != 0:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.autostart_all()
 
     def do_runc(self, line):
         """
