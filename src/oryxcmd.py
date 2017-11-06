@@ -204,6 +204,11 @@ class OryxSysmgr:
         self._unlock_and_write_state(state)
         logging.info("Disabled guest \"%s\"" % (name))
 
+    def start_guest(self, name):
+        runc_args = ["run", "-d", name]
+        self.runc(name, runc_args)
+        logging.info("Started guest \"%s\"" % (name))
+
     def runc(self, name, runc_args):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
@@ -525,6 +530,29 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.disable_guest(name)
+
+    def do_start_guest(self, line):
+        """
+        start_guest NAME
+
+        Start an existing guest container. The container is launched in the
+        background, without access to the terminal where start_guest was
+        executed.
+
+        Arguments:
+
+            NAME    The identifier of the guest container to start.
+
+        Example:
+
+            start_guest test
+        """
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.start_guest(name)
 
     def do_runc(self, line):
         """
