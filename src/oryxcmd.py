@@ -209,6 +209,19 @@ class OryxSysmgr:
         self.runc(name, runc_args)
         logging.info("Started guest \"%s\"" % (name))
 
+    def stop_guest(self, name):
+        # TODO: Make timeout selectable and poll guest state to see if it has
+        # terminated early
+        timeout = 10
+        runc_args = ["kill", name, "TERM"]
+        self.runc(name, runc_args)
+        logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+
+        time.sleep(timeout)
+        runc_args = ["delete", "-f", name]
+        self.runc(name, runc_args)
+        logging.info("Stopped guest \"%s\"" % (name))
+
     def autostart_all(self):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
@@ -569,6 +582,28 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.start_guest(name)
+
+    def do_stop_guest(self, line):
+        """
+        stop_guest NAME
+
+        Stop a running guest container. SIGTERM is sent to the container so that
+        it can shutdown cleanly. After 10 seconds, the container is halted.
+
+        Arguments:
+
+            NAME    The identifier of the guest container to stop.
+
+        Example:
+
+            stop_guest test
+        """
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.stop_guest(name)
 
     def do_autostart_all(self, line):
         """
