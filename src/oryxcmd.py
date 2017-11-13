@@ -179,7 +179,7 @@ class OryxSysmgr:
         if name not in state['guests']:
             logging.error("Guest %s not defined!" % (name))
             return
-        if ['guests'][name]['autostart_enabled'] == 1:
+        if state['guests'][name]['autostart_enabled'] == 1:
             logging.error("Guest %s already enabled!" % (name))
             return
 
@@ -196,7 +196,7 @@ class OryxSysmgr:
         if name not in state['guests']:
             logging.error("Guest %s not defined!" % (name))
             return
-        if ['guests'][name]['autostart_enabled'] == 0:
+        if state['guests'][name]['autostart_enabled'] == 0:
             logging.error("Guest %s already disabled!" % (name))
             return
 
