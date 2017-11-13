@@ -311,6 +311,7 @@ class OryxSysmgr:
         # launch the desired command
         command_args = shlex.split(command)
         spec['process']['args'] = ['/sbin/dumb-init'] + command_args
+        spec['process']['terminal'] = False
 
         # Write back the updated spec
         spec_file.seek(0)
