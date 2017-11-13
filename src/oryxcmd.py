@@ -37,6 +37,8 @@ import time
 import types
 import urllib.request
 
+from datetime import datetime
+
 APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
@@ -210,6 +212,9 @@ class OryxSysmgr:
         log_path = os.path.join("/var/lib/oryx-guests", name, "log")
 
         with open(log_path, "a") as f:
+            timestamp = datetime.now().isoformat()
+            f.write(">>> Starting guest \"%s\" at %s\n" % (name, timestamp))
+            f.flush()
             self.runc(name, runc_args, stdin=subprocess.DEVNULL, stdout=f,
                     stderr=subprocess.STDOUT)
 
