@@ -22,12 +22,12 @@
 #
 
 PACKAGE_NAME := oryx-apps
-PACKAGE_VERSION := 0.1.1
+PACKAGE_VERSION := 0.2.0
 
 PREFIX := /usr/local
 sbindir := $(PREFIX)/sbin
 
-APPS := bin/oryxcmd bin/oryx-guest-init
+APPS := bin/oryxcmd
 
 all: $(APPS)
 

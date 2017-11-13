@@ -28,12 +28,16 @@ import fcntl
 import json
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
 import tarfile
+import time
 import types
 import urllib.request
+
+from datetime import datetime
 
 APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
@@ -111,10 +115,14 @@ class OryxSysmgr:
         image_root = os.path.join(source['url'], 'guest', image_name)
         image_config = self._get_image_config(image_root)
 
-        rootfs_url = os.path.join(image_root, image_config['ARCHIVE'])
+        if image_config['SYSTEM_PROFILE'] != 'guest':
+            logging.error("Image \"%s\" is not a valid guest image!" % (image))
+            return
+
+        rootfs_url = os.path.join(image_root, image_config['ROOTFS'])
         local_path = os.path.join("/var/lib/oryx-guests", name)
         self._install_rootfs(rootfs_url, local_path)
-        self._create_spec_file(name, local_path)
+        self._create_spec_file(name, local_path, image_config['COMMAND'])
 
         state['guests'][name] = {
                 'image_name': image_name,
@@ -122,6 +130,7 @@ class OryxSysmgr:
                 'source_name': source_name,
                 'source': source,
                 'path': local_path,
+                'autostart_enabled': 0,
             }
 
         self._unlock_and_write_state(state)
@@ -164,7 +173,99 @@ class OryxSysmgr:
 
         print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
 
-    def runc(self, name, runc_args):
+    def enable_guest(self, name):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if state['guests'][name]['autostart_enabled'] == 1:
+            logging.error("Guest %s already enabled!" % (name))
+            return
+
+        state['guests'][name]['autostart_enabled'] = 1
+
+        self._unlock_and_write_state(state)
+        logging.info("Enabled guest \"%s\"" % (name))
+
+    def disable_guest(self, name):
+        state = self._lock_and_read_state()
+        if "guests" not in state:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if name not in state['guests']:
+            logging.error("Guest %s not defined!" % (name))
+            return
+        if state['guests'][name]['autostart_enabled'] == 0:
+            logging.error("Guest %s already disabled!" % (name))
+            return
+
+        state['guests'][name]['autostart_enabled'] = 0
+
+        self._unlock_and_write_state(state)
+        logging.info("Disabled guest \"%s\"" % (name))
+
+    def start_guest(self, name):
+        runc_args = ["run", "-d", name]
+        log_path = os.path.join("/var/lib/oryx-guests", name, "log")
+
+        with open(log_path, "a") as f:
+            timestamp = datetime.now().isoformat()
+            f.write(">>> Starting guest \"%s\" at %s\n" % (name, timestamp))
+            f.flush()
+            self.runc(name, runc_args, stdin=subprocess.DEVNULL, stdout=f,
+                    stderr=subprocess.STDOUT)
+
+        logging.info("Started guest \"%s\"" % (name))
+
+    def stop_guest(self, name):
+        # TODO: Make timeout selectable and poll guest state to see if it has
+        # terminated early
+        timeout = 10
+        runc_args = ["kill", name, "TERM"]
+        self.runc(name, runc_args)
+        logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+
+        time.sleep(timeout)
+        runc_args = ["delete", "-f", name]
+        self.runc(name, runc_args)
+        logging.info("Stopped guest \"%s\"" % (name))
+
+    def autostart_all(self):
+        state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
+        if "guests" not in state:
+            logging.info("No guests defined!")
+            return
+
+        for name in state['guests']:
+            if state['guests'][name]['autostart_enabled'] == 1:
+                try:
+                    self.start_guest(name)
+                except:
+                    logging.error("Failed to start guest \"%s\"" % (name))
+
+        logging.info("Autostart all enabled guests complete")
+
+    def autostop_all(self):
+        state = self._lock_and_read_state()
+        self._unlock_and_discard_state()
+        if "guests" not in state:
+            logging.info("No guests defined!")
+            return
+
+        for name in state['guests']:
+            # TODO: Check if guest is actually running before we try to stop it
+            try:
+                self.stop_guest(name)
+            except:
+                logging.info("Failed to stop guest \"%s\", it probably wasn't running" % (name))
+
+        logging.info("Autostop all running guests complete")
+
+    def runc(self, name, runc_args, **kwargs):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "guests" not in state:
@@ -176,7 +277,7 @@ class OryxSysmgr:
 
         local_path = os.path.join("/var/lib/oryx-guests", name)
         args = ["runc"] + runc_args
-        subprocess.run(args, cwd=local_path, check=True)
+        subprocess.run(args, cwd=local_path, check=True, **kwargs)
 
     def _get_image_config(self, image_root):
         image_url = os.path.join(image_root, "image.json")
@@ -195,7 +296,7 @@ class OryxSysmgr:
             tf.extractall(rootfs_path)
         urllib.request.urlcleanup()
 
-    def _create_spec_file(self, name, local_path):
+    def _create_spec_file(self, name, local_path, command):
         spec_path = os.path.join(local_path, "config.json")
         logging.debug("Creating spec file \"%s\"..." % (spec_path))
         subprocess.run(["runc", "spec"], cwd=local_path, check=True)
@@ -216,8 +317,11 @@ class OryxSysmgr:
         # Set hostname to the container name
         spec['hostname'] = name
 
-        # Use oryx-guest-init as PID 1 within the container
-        spec['process']['args'] = ['/sbin/oryx-guest-init']
+        # Use dumb-init as PID 1 within the container and have this program
+        # launch the desired command
+        command_args = shlex.split(command)
+        spec['process']['args'] = ['/sbin/dumb-init'] + command_args
+        spec['process']['terminal'] = False
 
         # Write back the updated spec
         spec_file.seek(0)
@@ -439,6 +543,135 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.show_guest(name)
+
+    def do_enable_guest(self, line):
+        """
+        enable_guest NAME
+
+        Enable auto-start of a previously registered guest during system boot.
+
+        Arguments:
+
+            NAME    The identifier of the guest to enable.
+
+        Example:
+
+            enable_guest test
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.enable_guest(name)
+
+    def do_disable_guest(self, line):
+        """
+        disable_guest NAME
+
+        Disable auto-start of a previously registered guest during system boot.
+
+        Arguments:
+
+            NAME    The identifier of the guest to disable.
+
+        Example:
+
+            disable_guest test
+        """
+
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.disable_guest(name)
+
+    def do_start_guest(self, line):
+        """
+        start_guest NAME
+
+        Start an existing guest container. The container is launched in the
+        background, without access to the terminal where start_guest was
+        executed.
+
+        Arguments:
+
+            NAME    The identifier of the guest container to start.
+
+        Example:
+
+            start_guest test
+        """
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.start_guest(name)
+
+    def do_stop_guest(self, line):
+        """
+        stop_guest NAME
+
+        Stop a running guest container. SIGTERM is sent to the container so that
+        it can shutdown cleanly. After 10 seconds, the container is halted.
+
+        Arguments:
+
+            NAME    The identifier of the guest container to stop.
+
+        Example:
+
+            stop_guest test
+        """
+        args = line.split()
+        if len(args) != 1:
+            logging.error("Incorrect number of args!")
+            return
+        name = args[0]
+        self.sysmgr.stop_guest(name)
+
+    def do_autostart_all(self, line):
+        """
+        autostart_all
+
+        Start all containers which have autostart enabled.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            autostart_all
+        """
+        args = line.split()
+        if len(args) != 0:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.autostart_all()
+
+    def do_autostop_all(self, line):
+        """
+        autostop_all
+
+        Stop all currently running containers.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            autostop_all
+        """
+        args = line.split()
+        if len(args) != 0:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.autostop_all()
 
     def do_runc(self, line):
         """
