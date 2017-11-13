@@ -255,7 +255,7 @@ class OryxSysmgr:
 
         logging.info("Autostop all running guests complete")
 
-    def runc(self, name, runc_args):
+    def runc(self, name, runc_args, **kwargs):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "guests" not in state:
@@ -267,7 +267,7 @@ class OryxSysmgr:
 
         local_path = os.path.join("/var/lib/oryx-guests", name)
         args = ["runc"] + runc_args
-        subprocess.run(args, cwd=local_path, check=True)
+        subprocess.run(args, cwd=local_path, check=True, **kwargs)
 
     def _get_image_config(self, image_root):
         image_url = os.path.join(image_root, "image.json")
