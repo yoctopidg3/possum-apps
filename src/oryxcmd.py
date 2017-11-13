@@ -207,7 +207,12 @@ class OryxSysmgr:
 
     def start_guest(self, name):
         runc_args = ["run", "-d", name]
-        self.runc(name, runc_args)
+        log_path = os.path.join("/var/lib/oryx-guests", name, "log")
+
+        with open(log_path, "a") as f:
+            self.runc(name, runc_args, stdin=subprocess.DEVNULL, stdout=f,
+                    stderr=subprocess.STDOUT)
+
         logging.info("Started guest \"%s\"" % (name))
 
     def stop_guest(self, name):
