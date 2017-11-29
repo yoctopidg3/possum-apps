@@ -237,33 +237,39 @@ class OryxSysmgr:
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "guests" not in state:
-            logging.info("No guests defined!")
-            return
+            state['guests'] = {}
 
+        count = 0
+        count_success = 0
         for name in state['guests']:
             if state['guests'][name]['autostart_enabled'] == 1:
+                count += 1
                 try:
                     self.start_guest(name)
+                    count_success += 1
                 except:
                     logging.error("Failed to start guest \"%s\"" % (name))
 
-        logging.info("Autostart all enabled guests complete")
+        logging.info("Started %d of %d enabled guests" % (count_success, count))
 
     def autostop_all(self):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "guests" not in state:
-            logging.info("No guests defined!")
-            return
+            state['guests'] = {}
 
+        count = 0
+        count_success = 0
         for name in state['guests']:
+            count += 1
             # TODO: Check if guest is actually running before we try to stop it
             try:
                 self.stop_guest(name)
+                count_success += 1
             except:
                 logging.info("Failed to stop guest \"%s\", it probably wasn't running" % (name))
 
-        logging.info("Autostop all running guests complete")
+        logging.info("Stopped %d of %d guests" % (count_success, count))
 
     def runc(self, name, runc_args, **kwargs):
         state = self._lock_and_read_state()
