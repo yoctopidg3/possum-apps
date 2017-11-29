@@ -1,4 +1,6 @@
-# oryx-apps Makefile
+#! /bin/sh
+#
+# oryx-guests initscript
 #
 # Copyright (C) 2017 Togán Labs
 #
@@ -21,30 +23,20 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
-PACKAGE_NAME := oryx-apps
-PACKAGE_VERSION := 0.2.0
+set -e
 
-PREFIX := /usr/local
-sbindir := $(PREFIX)/sbin
-sysconfdir := /etc
-
-APPS := bin/oryxcmd
-
-all: $(APPS)
-
-bin/%: src/%.py Makefile
-	mkdir -p bin
-	sed -e "s/%%VERSION_STRING%%/$(PACKAGE_NAME) v$(PACKAGE_VERSION)/" $< > $@
-	chmod a+x $@
-
-install: $(APPS)
-	install -d "$(DESTDIR)$(sbindir)"
-	install -m 755 $(APPS) "$(DESTDIR)$(sbindir)"
-	install -d "$(DESTDIR)$(sysconfdir)/init.d"
-	install -m 755 src/oryx-guests-initscript "$(DESTDIR)$(sysconfdir)/init.d/oryx-guests"
-
-clean:
-	rm -rf bin
-
-version:
-	@echo $(PACKAGE_VERSION)
+case "$1" in
+    start)
+        oryxcmd autostart_all
+        ;;
+    stop)
+        oryxcmd autostop_all
+        ;;
+    restart)
+        $0 stop
+        $0 start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
