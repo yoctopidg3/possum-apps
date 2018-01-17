@@ -226,10 +226,13 @@ class OryxSysmgr:
         # terminated early
         timeout = 10
         runc_args = ["kill", name, "TERM"]
-        self.runc(name, runc_args)
-        logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+        try:
+            self.runc(name, runc_args)
+            logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+            time.sleep(timeout)
+        except:
+            logging.info("Failed to send SIGTERM, deleting guest immediately")
 
-        time.sleep(timeout)
         runc_args = ["delete", "-f", name]
         self.runc(name, runc_args)
         logging.info("Stopped guest \"%s\"" % (name))
