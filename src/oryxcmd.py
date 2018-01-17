@@ -337,6 +337,24 @@ class OryxSysmgr:
         spec['process']['capabilities']['permitted'] = capabilities
         spec['process']['capabilities']['ambient'] = capabilities
 
+        # Add tmpfs mounts
+        spec['mounts'].append({
+            "destination": "/run",
+            "type": "tmpfs",
+            "source": "tmpfs",
+            "options": [
+                "mode=0755",
+                "nodev",
+                "nosuid",
+                "strictatime"
+                ]
+            })
+        spec['mounts'].append({
+            "destination": "/var/volatile",
+            "type": "tmpfs",
+            "source": "tmpfs"
+            })
+
         # Write back the updated spec
         spec_file.seek(0)
         spec_file.truncate()
