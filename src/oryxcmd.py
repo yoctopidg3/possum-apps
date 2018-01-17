@@ -122,7 +122,8 @@ class OryxSysmgr:
         rootfs_url = os.path.join(image_root, image_config['ROOTFS'])
         local_path = os.path.join("/var/lib/oryx-guests", name)
         self._install_rootfs(rootfs_url, local_path)
-        self._create_spec_file(name, local_path, image_config['COMMAND'])
+        self._create_spec_file(name, local_path, image_config['COMMAND'],
+                image_config['CAPABILITIES'])
 
         state['guests'][name] = {
                 'image_name': image_name,
@@ -225,10 +226,13 @@ class OryxSysmgr:
         # terminated early
         timeout = 10
         runc_args = ["kill", name, "TERM"]
-        self.runc(name, runc_args)
-        logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+        try:
+            self.runc(name, runc_args)
+            logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+            time.sleep(timeout)
+        except:
+            logging.info("Failed to send SIGTERM, deleting guest immediately")
 
-        time.sleep(timeout)
         runc_args = ["delete", "-f", name]
         self.runc(name, runc_args)
         logging.info("Stopped guest \"%s\"" % (name))
@@ -302,7 +306,7 @@ class OryxSysmgr:
             tf.extractall(rootfs_path)
         urllib.request.urlcleanup()
 
-    def _create_spec_file(self, name, local_path, command):
+    def _create_spec_file(self, name, local_path, command, capabilities):
         spec_path = os.path.join(local_path, "config.json")
         logging.debug("Creating spec file \"%s\"..." % (spec_path))
         subprocess.run(["runc", "spec"], cwd=local_path, check=True)
@@ -328,6 +332,31 @@ class OryxSysmgr:
         command_args = shlex.split(command)
         spec['process']['args'] = ['/sbin/dumb-init'] + command_args
         spec['process']['terminal'] = False
+
+        # Define the capability sets for the container
+        spec['process']['capabilities']['effective'] = capabilities
+        spec['process']['capabilities']['bounding'] = capabilities
+        spec['process']['capabilities']['inheritable'] = capabilities
+        spec['process']['capabilities']['permitted'] = capabilities
+        spec['process']['capabilities']['ambient'] = capabilities
+
+        # Add tmpfs mounts
+        spec['mounts'].append({
+            "destination": "/run",
+            "type": "tmpfs",
+            "source": "tmpfs",
+            "options": [
+                "mode=0755",
+                "nodev",
+                "nosuid",
+                "strictatime"
+                ]
+            })
+        spec['mounts'].append({
+            "destination": "/var/volatile",
+            "type": "tmpfs",
+            "source": "tmpfs"
+            })
 
         # Write back the updated spec
         spec_file.seek(0)
