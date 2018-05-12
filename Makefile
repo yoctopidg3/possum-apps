@@ -28,7 +28,7 @@ PREFIX := /usr/local
 sbindir := $(PREFIX)/sbin
 sysconfdir := /etc
 
-APPS := bin/oryxcmd
+APPS := bin/oryxcmd bin/oryxcmd-test
 
 all: $(APPS)
 
