@@ -107,5 +107,11 @@ class OryxTests(OryxTestCase):
         self.assertIn(self.app_name, oryxcmd_output)
         self.assertIn(self.version_string, oryxcmd_output)
 
+    def test_help(self):
+        # Let's just test the command succeeds and output is not empty
+        rc = self.assertRunSuccess('oryxcmd help', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertTrue(len(oryxcmd_output))
+
 if __name__ == '__main__':
     unittest.main(testRunner=OryxTestRunner())
