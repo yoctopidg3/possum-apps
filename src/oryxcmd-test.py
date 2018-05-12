@@ -101,8 +101,11 @@ class OryxTestCase(unittest.TestCase):
         return rc
 
 class OryxTests(OryxTestCase):
-    def test_dummy(self):
-        self.assertIsNotNone(1)
+    def test_version(self):
+        rc = self.assertRunSuccess('oryxcmd version', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertIn(self.app_name, oryxcmd_output)
+        self.assertIn(self.version_string, oryxcmd_output)
 
 if __name__ == '__main__':
     unittest.main(testRunner=OryxTestRunner())
