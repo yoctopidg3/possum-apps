@@ -24,6 +24,7 @@
 #
 
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -75,6 +76,10 @@ class OryxTestCase(unittest.TestCase):
     def setUp(self):
         self.app_name = 'oryxcmd'
         self.version_string = '%%VERSION_STRING%%'
+        try:
+            self.source = os.environ['ORYXCMD_TEST_SOURCE']
+        except KeyError:
+            raise Exception('Set ORYXCMD_TEST_SOURCE environment variable and try again.')
 
     def __str__(self):
         return "%s: %s" % (str(sys.argv[0]), self._testMethodName)
