@@ -23,6 +23,7 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
+import json
 import subprocess
 import sys
 import unittest
@@ -112,6 +113,96 @@ class OryxTests(OryxTestCase):
         rc = self.assertRunSuccess('oryxcmd help', capture=True)
         oryxcmd_output = rc.stdout.decode('utf-8').strip()
         self.assertTrue(len(oryxcmd_output))
+
+    def test_main(self):
+        # For now this is one big sequential test case to keep things simple. We
+        # should break it out into separate cases later.
+
+        # Check no sources are registered at first
+        rc = self.assertRunSuccess('oryxcmd list_sources', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertEqual(len(oryxcmd_output), 0)
+
+        # Add a source
+        self.assertRunSuccess('oryxcmd add_source oryx %s' % (self.source))
+
+        # Check we now have one source named 'oryx'
+        rc = self.assertRunSuccess('oryxcmd list_sources', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertEqual(oryxcmd_output, 'oryx')
+
+        # Check the source url is correct
+        rc = self.assertRunSuccess('oryxcmd show_source oryx', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        state = json.loads(oryxcmd_output)
+        self.assertEqual(state['url'], self.source)
+
+        # Check no guests are registered at first
+        rc = self.assertRunSuccess('oryxcmd list_guests', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertEqual(len(oryxcmd_output), 0)
+
+        # Add a guest
+        self.assertRunSuccess('oryxcmd add_guest test oryx:minimal')
+
+        # Check we now have one guest named 'test'
+        rc = self.assertRunSuccess('oryxcmd list_guests', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertEqual(oryxcmd_output, 'test')
+
+        # Check the guest details are correct
+        rc = self.assertRunSuccess('oryxcmd show_guest test', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        state = json.loads(oryxcmd_output)
+        self.assertEqual(state['source_name'], 'oryx')
+        self.assertEqual(state['image_name'], 'minimal')
+        self.assertEqual(state['autostart_enabled'], 0)
+
+        # Enable autostart for the guest
+        self.assertRunSuccess('oryxcmd enable_guest test')
+
+        # Check the guest details have been updated
+        rc = self.assertRunSuccess('oryxcmd show_guest test', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        state = json.loads(oryxcmd_output)
+        self.assertEqual(state['autostart_enabled'], 1)
+
+        # Disable autostart for the guest
+        self.assertRunSuccess('oryxcmd disable_guest test')
+
+        # Check the guest details have been updated
+        rc = self.assertRunSuccess('oryxcmd show_guest test', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        state = json.loads(oryxcmd_output)
+        self.assertEqual(state['autostart_enabled'], 0)
+
+        # TODO: Test ssh - guest should be inaccessible
+
+        # Start the guest
+        self.assertRunSuccess('oryxcmd start_guest test')
+
+        # TODO: Test ssh - guest should be accessible
+
+        # Stop the guest
+        self.assertRunSuccess('oryxcmd stop_guest test')
+
+        # TODO: Test ssh - guest should be inaccessible
+
+        # Remove guest
+        self.assertRunSuccess('oryxcmd remove_guest test')
+
+        # Check no guests are registered now
+        rc = self.assertRunSuccess('oryxcmd list_guests', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertEqual(len(oryxcmd_output), 0)
+
+        # Remove source
+        self.assertRunSuccess('oryxcmd remove_source oryx')
+
+        # Check no sources are registered now
+        rc = self.assertRunSuccess('oryxcmd list_sources', capture=True)
+        oryxcmd_output = rc.stdout.decode('utf-8').strip()
+        self.assertEqual(len(oryxcmd_output), 0)
 
 if __name__ == '__main__':
     unittest.main(testRunner=OryxTestRunner())
