@@ -70,6 +70,10 @@ class OryxTestRunner:
         return result
 
 class OryxTestCase(unittest.TestCase):
+    def setUp(self):
+        self.app_name = 'oryxcmd'
+        self.version_string = '%%VERSION_STRING%%'
+
     def __str__(self):
         return "%s: %s" % (str(sys.argv[0]), self._testMethodName)
 
