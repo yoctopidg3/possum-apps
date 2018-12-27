@@ -1,6 +1,6 @@
 # oryx-apps Makefile
 #
-# Copyright (C) 2017 Togán Labs
+# Copyright (C) 2017-2018 Togán Labs
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -22,11 +22,12 @@
 #
 
 PACKAGE_NAME := oryx-apps
-PACKAGE_VERSION := 0.2.4
+PACKAGE_VERSION := 0.2.5
 
 PREFIX := /usr/local
 sbindir := $(PREFIX)/sbin
 sysconfdir := /etc
+syslibdir := /lib
 
 APPS := bin/oryxcmd bin/oryxcmd-test
 
@@ -40,8 +41,8 @@ bin/%: src/%.py Makefile
 install: $(APPS)
 	install -d "$(DESTDIR)$(sbindir)"
 	install -m 755 $(APPS) "$(DESTDIR)$(sbindir)"
-	install -d "$(DESTDIR)$(sysconfdir)/init.d"
-	install -m 755 src/oryx-guests-initscript "$(DESTDIR)$(sysconfdir)/init.d/oryx-guests"
+	install -d "$(DESTDIR)$(syslibdir)/systemd/system"
+	install -m 644 src/oryx-guests.service "$(DESTDIR)$(syslibdir)/systemd/system/oryx-guests.service"
 
 clean:
 	rm -rf bin

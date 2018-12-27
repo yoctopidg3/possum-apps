@@ -1,8 +1,6 @@
-#! /bin/sh
+# oryx-guests service file
 #
-# oryx-guests initscript
-#
-# Copyright (C) 2017 Togán Labs
+# Copyright (C) 2018 Togán Labs
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -23,20 +21,16 @@
 # DEALINGS IN THE SOFTWARE.
 #
 
-set -e
+[Unit]
+Description=Auto start and stop enabled oryx guests
+After=network.target
 
-case "$1" in
-    start)
-        oryxcmd autostart_all
-        ;;
-    stop)
-        oryxcmd autostop_all
-        ;;
-    restart)
-        $0 stop
-        $0 start
-        ;;
-    *)
-        echo "Usage: $0 {start|stop|restart}"
-        exit 1
-esac
+[Service]
+Type=oneshot
+ExecStart=/sbin/oryxcmd autostart_all
+RemainAfterExit=true
+ExecStop=/sbin/oryxcmd autostop_all
+StandardOutput=journal
+
+[Install]
+WantedBy=multi-user.target
