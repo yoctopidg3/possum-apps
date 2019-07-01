@@ -44,6 +44,82 @@ from datetime import datetime
 APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
+def get_image_config(image_root):
+    image_url = os.path.join(image_root, "image.json")
+
+    logging.debug("Retrieving \"%s\"...", image_url)
+    image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
+    return json.loads(image_json)
+
+def install_rootfs(rootfs_url, local_path):
+    rootfs_path = os.path.join(local_path, "rootfs")
+
+    logging.debug("Retrieving \"%s\"...", rootfs_url)
+    (rootfs_filename, _) = urllib.request.urlretrieve(rootfs_url)
+    logging.debug("Extracting to \"%s\"...", rootfs_path)
+    with tarfile.open(rootfs_filename, mode="r:xz") as tarball:
+        tarball.extractall(rootfs_path)
+    urllib.request.urlcleanup()
+
+def create_spec_file(name, local_path, command, capabilities):
+    spec_path = os.path.join(local_path, "config.json")
+    logging.debug("Creating spec file \"%s\"...", spec_path)
+    subprocess.run(["runc", "spec"], cwd=local_path, check=True)
+    spec_file = open(spec_path, 'r+')
+    spec = json.load(spec_file)
+
+    # Add netns hook
+    if not "hooks" in spec:
+        spec['hooks'] = {}
+    if not "prestart" in spec["hooks"]:
+        spec['hooks']['prestart'] = []
+    netns_hook = {'path': '/usr/sbin/netns'}
+    spec['hooks']['prestart'].append(netns_hook)
+
+    # Make rootfs writable
+    spec['root']['readonly'] = False
+
+    # Set hostname to the container name
+    spec['hostname'] = name
+
+    # Use dumb-init as PID 1 within the container and have this program
+    # launch the desired command
+    command_args = shlex.split(command)
+    spec['process']['args'] = ['/sbin/dumb-init'] + command_args
+    spec['process']['terminal'] = False
+
+    # Define the capability sets for the container
+    spec['process']['capabilities']['effective'] = capabilities
+    spec['process']['capabilities']['bounding'] = capabilities
+    spec['process']['capabilities']['inheritable'] = capabilities
+    spec['process']['capabilities']['permitted'] = capabilities
+    spec['process']['capabilities']['ambient'] = capabilities
+
+    # Add tmpfs mounts
+    spec['mounts'].append({
+        "destination": "/run",
+        "type": "tmpfs",
+        "source": "tmpfs",
+        "options": [
+            "mode=0755",
+            "nodev",
+            "nosuid",
+            "strictatime"
+            ]
+        })
+    spec['mounts'].append({
+        "destination": "/var/volatile",
+        "type": "tmpfs",
+        "source": "tmpfs"
+        })
+
+    # Write back the updated spec
+    spec_file.seek(0)
+    spec_file.truncate()
+    json.dump(spec, spec_file, indent=4)
+    spec_file.write("\n")
+    spec_file.close()
+
 class OryxSysmgr:
     def __init__(self):
         self.statefile = None
@@ -118,7 +194,7 @@ class OryxSysmgr:
         source = state['sources'][source_name]
 
         image_root = os.path.join(source['url'], 'guest', image_name)
-        image_config = self._get_image_config(image_root)
+        image_config = get_image_config(image_root)
 
         if image_config['SYSTEM_PROFILE'] != 'guest':
             logging.error("Image \"%s\" is not a valid guest image!", image)
@@ -126,9 +202,9 @@ class OryxSysmgr:
 
         rootfs_url = os.path.join(image_root, image_config['ROOTFS'])
         local_path = os.path.join("/var/lib/oryx-guests", name)
-        self._install_rootfs(rootfs_url, local_path)
-        self._create_spec_file(name, local_path, image_config['COMMAND'],
-                               image_config['CAPABILITIES'])
+        install_rootfs(rootfs_url, local_path)
+        create_spec_file(name, local_path, image_config['COMMAND'],
+                         image_config['CAPABILITIES'])
 
         state['guests'][name] = {
             'image_name': image_name,
@@ -293,82 +369,6 @@ class OryxSysmgr:
         local_path = os.path.join("/var/lib/oryx-guests", name)
         args = ["runc"] + runc_args
         subprocess.run(args, cwd=local_path, check=True, **kwargs)
-
-    def _get_image_config(self, image_root):
-        image_url = os.path.join(image_root, "image.json")
-
-        logging.debug("Retrieving \"%s\"...", image_url)
-        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
-        return json.loads(image_json)
-
-    def _install_rootfs(self, rootfs_url, local_path):
-        rootfs_path = os.path.join(local_path, "rootfs")
-
-        logging.debug("Retrieving \"%s\"...", rootfs_url)
-        (rootfs_filename, _) = urllib.request.urlretrieve(rootfs_url)
-        logging.debug("Extracting to \"%s\"...", rootfs_path)
-        with tarfile.open(rootfs_filename, mode="r:xz") as tarball:
-            tarball.extractall(rootfs_path)
-        urllib.request.urlcleanup()
-
-    def _create_spec_file(self, name, local_path, command, capabilities):
-        spec_path = os.path.join(local_path, "config.json")
-        logging.debug("Creating spec file \"%s\"...", spec_path)
-        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
-        spec_file = open(spec_path, 'r+')
-        spec = json.load(spec_file)
-
-        # Add netns hook
-        if not "hooks" in spec:
-            spec['hooks'] = {}
-        if not "prestart" in spec["hooks"]:
-            spec['hooks']['prestart'] = []
-        netns_hook = {'path': '/usr/sbin/netns'}
-        spec['hooks']['prestart'].append(netns_hook)
-
-        # Make rootfs writable
-        spec['root']['readonly'] = False
-
-        # Set hostname to the container name
-        spec['hostname'] = name
-
-        # Use dumb-init as PID 1 within the container and have this program
-        # launch the desired command
-        command_args = shlex.split(command)
-        spec['process']['args'] = ['/sbin/dumb-init'] + command_args
-        spec['process']['terminal'] = False
-
-        # Define the capability sets for the container
-        spec['process']['capabilities']['effective'] = capabilities
-        spec['process']['capabilities']['bounding'] = capabilities
-        spec['process']['capabilities']['inheritable'] = capabilities
-        spec['process']['capabilities']['permitted'] = capabilities
-        spec['process']['capabilities']['ambient'] = capabilities
-
-        # Add tmpfs mounts
-        spec['mounts'].append({
-            "destination": "/run",
-            "type": "tmpfs",
-            "source": "tmpfs",
-            "options": [
-                "mode=0755",
-                "nodev",
-                "nosuid",
-                "strictatime"
-                ]
-            })
-        spec['mounts'].append({
-            "destination": "/var/volatile",
-            "type": "tmpfs",
-            "source": "tmpfs"
-            })
-
-        # Write back the updated spec
-        spec_file.seek(0)
-        spec_file.truncate()
-        json.dump(spec, spec_file, indent=4)
-        spec_file.write("\n")
-        spec_file.close()
 
     def _lock_and_read_state(self):
         try:
