@@ -7,7 +7,7 @@
 #
 
 # Disable a bunch of pylint checks for now
-# pylint: disable=missing-docstring,bare-except,no-self-use,fixme
+# pylint: disable=missing-docstring,no-self-use,fixme
 
 import cmd
 import fcntl
@@ -294,8 +294,9 @@ class OryxSysmgr:
             self.runc(name, runc_args)
             logging.info("Sent SIGTERM, waiting for %d seconds", timeout)
             time.sleep(timeout)
-        except:
-            logging.info("Failed to send SIGTERM, deleting guest immediately")
+        except subprocess.CalledProcessError as err:
+            logging.info("Failed to send SIGTERM: %s", err)
+            logging.info("Deleting guest immediately")
 
         runc_args = ["delete", "-f", name]
         self.runc(name, runc_args)
@@ -315,8 +316,8 @@ class OryxSysmgr:
                 try:
                     self.start_guest(name)
                     count_success += 1
-                except:
-                    logging.error("Failed to start guest \"%s\"", name)
+                except subprocess.CalledProcessError as err:
+                    logging.error("Failed to start guest \"%s\": %s", name, err)
 
         logging.info("Started %d of %d enabled guests", count_success, count)
 
@@ -335,8 +336,8 @@ class OryxSysmgr:
             try:
                 self.stop_guest(name)
                 count_success += 1
-            except:
-                logging.info("Failed to stop guest \"%s\", it probably wasn't running", name)
+            except subprocess.CalledProcessError as err:
+                logging.info("Failed to stop guest \"%s\": %s", name, err)
 
         logging.info("Stopped %d of %d guests", count_success, count)
 
@@ -360,8 +361,9 @@ class OryxSysmgr:
             self.statefile = open('/var/lib/oryx-guests/state', 'r+')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return json.load(self.statefile)
-        except:
-            logging.debug("No existing state found. Creating blank state...")
+        except OSError as err:
+            logging.debug("Existing state cannot be opened: %s", err)
+            logging.debug("Creating blank state...")
             os.makedirs("/var/lib/oryx-guests", exist_ok=True)
             self.statefile = open('/var/lib/oryx-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
