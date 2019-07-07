@@ -14,6 +14,16 @@ import unittest
 
 from betatest.amtest import AMTestRunner
 
+def run_common(cmd, capture, combine_capture, kwargs):
+    if capture:
+        kwargs['stdout'] = subprocess.PIPE
+        if combine_capture:
+            kwargs['stderr'] = subprocess.STDOUT
+        else:
+            kwargs['stderr'] = subprocess.PIPE
+    kwargs['shell'] = True
+    return subprocess.run(cmd, **kwargs)
+
 class OryxTestCase(unittest.TestCase):
     def setUp(self):
         self.app_name = 'oryxcmd'
@@ -26,25 +36,15 @@ class OryxTestCase(unittest.TestCase):
     def __str__(self):
         return "%s: %s" % (str(sys.argv[0]), self._testMethodName)
 
-    def _run_common(self, cmd, capture, combine_capture, kwargs):
-        if capture:
-            kwargs['stdout'] = subprocess.PIPE
-            if combine_capture:
-                kwargs['stderr'] = subprocess.STDOUT
-            else:
-                kwargs['stderr'] = subprocess.PIPE
-        kwargs['shell'] = True
-        return subprocess.run(cmd, **kwargs)
-
     def assertRunSuccess(self, cmd, capture=False, combine_capture=False, **kwargs):
         """Run a command and assert that it succeeds"""
-        rc = self._run_common(cmd, capture, combine_capture, kwargs)
+        rc = run_common(cmd, capture, combine_capture, kwargs)
         self.assertEqual(rc.returncode, 0)
         return rc
 
     def assertRunFail(self, cmd, capture=False, combine_capture=False, **kwargs):
         """Run a command and assert that it fails"""
-        rc = self._run_common(cmd, capture, combine_capture, kwargs)
+        rc = run_common(cmd, capture, combine_capture, kwargs)
         self.assertNotEqual(rc.returncode, 0)
         return rc
 
