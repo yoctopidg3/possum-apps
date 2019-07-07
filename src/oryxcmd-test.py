@@ -2,7 +2,7 @@
 #
 # oryxcmd tests.
 #
-# Copyright (C) 2018 Togán Labs
+# Copyright (C) 2018-2019 Togán Labs
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -29,48 +29,7 @@ import subprocess
 import sys
 import unittest
 
-class OryxTestResult(unittest.TestResult):
-    def __init__(self, runner):
-        super(OryxTestResult, self).__init__()
-        self.runner = runner
-
-    def addError(self, test, err):
-        super(OryxTestResult, self).addError(test, err)
-        self.runner.write("ERROR: %s: %s\n" % (str(test), str(err[1])))
-        import traceback
-        traceback.print_tb(err[2])
-
-    def addSuccess(self, test):
-        super(OryxTestResult, self).addSuccess(test)
-        self.runner.write("PASS: %s\n" % str(test))
-
-    def addFailure(self, test, err):
-        super(OryxTestResult, self).addFailure(test, err)
-        self.runner.write("FAIL: %s: %s\n" % (str(test), str(err[1])))
-
-    def addSkip(self, test, reason):
-        super(OryxTestResult, self).addSkip(test, reason)
-        self.runner.write("SKIP: %s: %s\n" % (str(test), str(reason)))
-
-    def addExpectedFailure(self, test, err):
-        super(OryxTestResult, self).addExpectedFailure(test, err)
-        self.runner.write("XFAIL: %s\n" % (str(test)))
-
-    def addUnexpectedSuccess(self, test):
-        super(OryxTestResult, self).addUnexpectedSuccess(test)
-        self.runner.write("XPASS: %s\n" % str(test))
-
-class OryxTestRunner:
-    def __init__(self, stream=sys.stderr):
-        self.stream = stream
-
-    def write(self, message):
-        self.stream.write(message)
-
-    def run(self, test):
-        result = OryxTestResult(self)
-        test(result)
-        return result
+from betatest.amtest import AMTestRunner
 
 class OryxTestCase(unittest.TestCase):
     def setUp(self):
@@ -213,4 +172,4 @@ class OryxTests(OryxTestCase):
         self.assertEqual(len(oryxcmd_output), 0)
 
 if __name__ == '__main__':
-    unittest.main(testRunner=OryxTestRunner())
+    unittest.main(testRunner=AMTestRunner())
