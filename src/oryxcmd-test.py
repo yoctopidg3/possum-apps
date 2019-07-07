@@ -124,18 +124,21 @@ class OryxTests(OryxTestCase):
         self.assertEqual(state['autostart_enabled'], 0)
 
         # TODO: Test ssh - guest should be inaccessible
+        # (https://gitlab.com/oryx/oryx/issues/43)
         self.assertRunFail('ping -c 3 172.19.0.2')
 
         # Start the guest
         self.assertRunSuccess('oryxcmd start_guest test')
 
         # TODO: Test ssh - guest should be accessible
+        # (https://gitlab.com/oryx/oryx/issues/43)
         self.assertRunSuccess('ping -c 3 172.19.0.2')
 
         # Stop the guest
         self.assertRunSuccess('oryxcmd stop_guest test')
 
         # TODO: Test ssh - guest should be inaccessible
+        # (https://gitlab.com/oryx/oryx/issues/43)
         self.assertRunFail('ping -c 3 172.19.0.2')
 
         # Remove guest

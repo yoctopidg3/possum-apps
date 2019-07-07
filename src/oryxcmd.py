@@ -287,7 +287,7 @@ class OryxSysmgr:
 
     def stop_guest(self, name):
         # TODO: Make timeout selectable and poll guest state to see if it has
-        # terminated early
+        # terminated early (https://gitlab.com/oryx/oryx/issues/41)
         timeout = 10
         runc_args = ["kill", name, "TERM"]
         try:
@@ -331,6 +331,7 @@ class OryxSysmgr:
         for name in state['guests']:
             count += 1
             # TODO: Check if guest is actually running before we try to stop it
+            # (https://gitlab.com/oryx/oryx/issues/42)
             try:
                 self.stop_guest(name)
                 count_success += 1
