@@ -6,6 +6,9 @@
 # SPDX-License-Identifier: MIT
 #
 
+# Disable a bunch of pylint checks for now
+# pylint: disable=missing-docstring,no-self-use,fixme,invalid-name
+
 import json
 import os
 import subprocess
