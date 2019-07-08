@@ -11,6 +11,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import unittest
@@ -67,6 +68,11 @@ class OryxTests(OryxTestCase):
     def test_main(self):
         # For now this is one big sequential test case to keep things simple. We
         # should break it out into separate cases later.
+
+        # We need to reset into a clean state to remove any sources and guests
+        # added by preconfiguration.
+        self.assertRunSuccess('oryxcmd shutdown')
+        shutil.rmtree('/var/lib/oryx-guests')
 
         # Check no sources are registered at first
         rc = self.assertRunSuccess('oryxcmd list_sources', capture=True)
