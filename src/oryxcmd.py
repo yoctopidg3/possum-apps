@@ -7,7 +7,7 @@
 #
 
 # Disable a bunch of pylint checks for now
-# pylint: disable=missing-docstring,no-self-use,fixme
+# pylint: disable=missing-docstring,no-self-use,fixme,too-many-public-methods
 
 import cmd
 import configparser
@@ -375,6 +375,13 @@ class OryxSysmgr:
                 logging.info("Failed to stop guest \"%s\": %s", name, err)
 
         logging.info("Stopped %d of %d guests", count_success, count)
+
+    def startup(self):
+        self.preconfigure()
+        self.autostart_all()
+
+    def shutdown(self):
+        self.autostop_all()
 
     def runc(self, name, runc_args, **kwargs):
         state = self._lock_and_read_state()
@@ -754,6 +761,48 @@ class OryxCmd(cmd.Cmd):
             logging.error("Incorrect number of args!")
             return
         self.sysmgr.autostop_all()
+
+    def do_startup(self, line):
+        """
+        startup
+
+        Convenience function for use in systemd service file. Runs
+        'preconfigure' then 'autostart_all'.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            startup
+        """
+        args = line.split()
+        if args:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.startup()
+
+    def do_shutdown(self, line):
+        """
+        shutdown
+
+        Convenience function for use in systemd service file. Runs
+        'autostop_all'.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            shutdown
+        """
+        args = line.split()
+        if args:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.shutdown()
 
     def do_runc(self, line):
         """
