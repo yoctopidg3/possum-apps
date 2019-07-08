@@ -10,9 +10,9 @@ After=network.target
 
 [Service]
 Type=oneshot
-ExecStart=/sbin/oryxcmd autostart_all
+ExecStart=/sbin/oryxcmd startup
 RemainAfterExit=true
-ExecStop=/sbin/oryxcmd autostop_all
+ExecStop=/sbin/oryxcmd shutdown
 StandardOutput=journal
 
 [Install]
