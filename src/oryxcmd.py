@@ -10,6 +10,7 @@
 # pylint: disable=missing-docstring,no-self-use,fixme
 
 import cmd
+import configparser
 import fcntl
 import json
 import logging
@@ -301,6 +302,40 @@ class OryxSysmgr:
         runc_args = ["delete", "-f", name]
         self.runc(name, runc_args)
         logging.info("Stopped guest \"%s\"", name)
+
+    def preconfigure(self):
+        if os.path.exists('/var/lib/oryx-guests/preconfigure-done'):
+            logging.debug("Preconfiguration already done")
+            return
+
+        logging.debug("Preconfiguration needed")
+        os.makedirs("/var/lib/oryx-guests", exist_ok=True)
+        open('/var/lib/oryx-guests/preconfigure-done', 'w').close()
+
+        logging.debug("Loading preconfiguration data...")
+        preconfig = configparser.ConfigParser()
+        conf_list = os.listdir('/usr/share/oryx/preconfig.d')
+        conf_list.sort()
+        for fname in conf_list:
+            path = os.path.join('/usr/share/oryx/preconfig.d', fname)
+            preconfig.read(path)
+
+        logging.debug("Setting up sources...")
+        for section in preconfig.sections():
+            if section.startswith('source:'):
+                name = section.split(':', 1)[1]
+                url = preconfig.get(section, 'url')
+                self.add_source(name, url)
+
+        logging.debug("Setting up guests...")
+        for section in preconfig.sections():
+            if section.startswith('guest:'):
+                name = section.split(':', 1)[1]
+                image = preconfig.get(section, 'image')
+                enable = preconfig.get(section, 'enable')
+                self.add_guest(name, image)
+                if enable.lower() in ['true', 'yes', '1']:
+                    self.enable_guest(name)
 
     def autostart_all(self):
         state = self._lock_and_read_state()
@@ -658,6 +693,27 @@ class OryxCmd(cmd.Cmd):
             return
         name = args[0]
         self.sysmgr.stop_guest(name)
+
+    def do_preconfigure(self, line):
+        """
+        preconfigure
+
+        Read pre-configuration data from `/usr/share/oryx/preconfig.d` and
+        add the listed sources and guests.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            preconfigure
+        """
+        args = line.split()
+        if args:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.preconfigure()
 
     def do_autostart_all(self, line):
         """
