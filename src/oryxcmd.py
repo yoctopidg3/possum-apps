@@ -3,27 +3,14 @@
 # oryxcmd
 #
 # Copyright (C) 2017-2018 Togán Labs
-#
-# Permission is hereby granted, free of charge, to any person obtaining a
-# copy of this software and associated documentation files (the "Software"),
-# to deal in the Software without restriction, including without limitation
-# the rights to use, copy, modify, merge, publish, distribute, sublicense,
-# and/or sell copies of the Software, and to permit persons to whom the
-# Software is furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-# DEALINGS IN THE SOFTWARE.
+# SPDX-License-Identifier: MIT
 #
 
+# Disable a bunch of pylint checks for now
+# pylint: disable=missing-docstring,no-self-use,fixme,too-many-public-methods
+
 import cmd
+import configparser
 import fcntl
 import json
 import logging
@@ -34,7 +21,6 @@ import subprocess
 import sys
 import tarfile
 import time
-import types
 import urllib.request
 
 from datetime import datetime
@@ -42,34 +28,113 @@ from datetime import datetime
 APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
+def get_image_config(image_root):
+    image_url = os.path.join(image_root, "image.json")
+
+    logging.debug("Retrieving \"%s\"...", image_url)
+    image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
+    return json.loads(image_json)
+
+def install_rootfs(rootfs_url, local_path):
+    rootfs_path = os.path.join(local_path, "rootfs")
+
+    logging.debug("Retrieving \"%s\"...", rootfs_url)
+    (rootfs_filename, _) = urllib.request.urlretrieve(rootfs_url)
+    logging.debug("Extracting to \"%s\"...", rootfs_path)
+    with tarfile.open(rootfs_filename, mode="r:xz") as tarball:
+        tarball.extractall(rootfs_path)
+    urllib.request.urlcleanup()
+
+def create_spec_file(name, local_path, command, capabilities):
+    spec_path = os.path.join(local_path, "config.json")
+    logging.debug("Creating spec file \"%s\"...", spec_path)
+    subprocess.run(["runc", "spec"], cwd=local_path, check=True)
+    spec_file = open(spec_path, 'r+')
+    spec = json.load(spec_file)
+
+    # Add netns hook
+    if not "hooks" in spec:
+        spec['hooks'] = {}
+    if not "prestart" in spec["hooks"]:
+        spec['hooks']['prestart'] = []
+    netns_hook = {'path': '/usr/sbin/netns'}
+    spec['hooks']['prestart'].append(netns_hook)
+
+    # Make rootfs writable
+    spec['root']['readonly'] = False
+
+    # Set hostname to the container name
+    spec['hostname'] = name
+
+    # Use dumb-init as PID 1 within the container and have this program
+    # launch the desired command
+    command_args = shlex.split(command)
+    spec['process']['args'] = ['/sbin/dumb-init'] + command_args
+    spec['process']['terminal'] = False
+
+    # Define the capability sets for the container
+    spec['process']['capabilities']['effective'] = capabilities
+    spec['process']['capabilities']['bounding'] = capabilities
+    spec['process']['capabilities']['inheritable'] = capabilities
+    spec['process']['capabilities']['permitted'] = capabilities
+    spec['process']['capabilities']['ambient'] = capabilities
+
+    # Add tmpfs mounts
+    spec['mounts'].append({
+        "destination": "/run",
+        "type": "tmpfs",
+        "source": "tmpfs",
+        "options": [
+            "mode=0755",
+            "nodev",
+            "nosuid",
+            "strictatime"
+            ]
+        })
+    spec['mounts'].append({
+        "destination": "/var/volatile",
+        "type": "tmpfs",
+        "source": "tmpfs"
+        })
+
+    # Write back the updated spec
+    spec_file.seek(0)
+    spec_file.truncate()
+    json.dump(spec, spec_file, indent=4)
+    spec_file.write("\n")
+    spec_file.close()
+
 class OryxSysmgr:
+    def __init__(self):
+        self.statefile = None
+
     def add_source(self, name, url):
         state = self._lock_and_read_state()
         if "sources" in state:
             if name in state['sources']:
-                logging.error("Source %s already defined!" % (name))
+                logging.error("Source %s already defined!", name)
                 return
         else:
             state['sources'] = {}
 
         state['sources'][name] = {
-                'url': url
-            }
+            'url': url
+        }
         self._unlock_and_write_state(state)
-        logging.info("Added source \"%s\" with URL \"%s\"" % (name, url))
+        logging.info("Added source \"%s\" with URL \"%s\"", name, url)
 
     def remove_source(self, name):
         state = self._lock_and_read_state()
         if "sources" not in state:
-            logging.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!", name)
             return
         if name not in state['sources']:
-            logging.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!", name)
             return
 
         del state['sources'][name]
         self._unlock_and_write_state(state)
-        logging.info("Removed source \"%s\"" % (name))
+        logging.info("Removed source \"%s\"", name)
 
     def list_sources(self):
         state = self._lock_and_read_state()
@@ -84,10 +149,10 @@ class OryxSysmgr:
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "sources" not in state:
-            logging.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!", name)
             return
         if name not in state['sources']:
-            logging.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!", name)
             return
 
         print(json.dumps(state['sources'][name], indent=4, sort_keys=True))
@@ -96,7 +161,7 @@ class OryxSysmgr:
         state = self._lock_and_read_state()
         if "guests" in state:
             if name in state['guests']:
-                logging.error("Guest %s already defined!" % (name))
+                logging.error("Guest %s already defined!", name)
                 return
         else:
             state['guests'] = {}
@@ -107,51 +172,51 @@ class OryxSysmgr:
         (source_name, image_name) = image.split(":")
 
         if source_name not in state['sources']:
-            logging.error("Source %s not defined!" % (name))
+            logging.error("Source %s not defined!", name)
             return
 
         source = state['sources'][source_name]
 
         image_root = os.path.join(source['url'], 'guest', image_name)
-        image_config = self._get_image_config(image_root)
+        image_config = get_image_config(image_root)
 
         if image_config['SYSTEM_PROFILE'] != 'guest':
-            logging.error("Image \"%s\" is not a valid guest image!" % (image))
+            logging.error("Image \"%s\" is not a valid guest image!", image)
             return
 
         rootfs_url = os.path.join(image_root, image_config['ROOTFS'])
         local_path = os.path.join("/var/lib/oryx-guests", name)
-        self._install_rootfs(rootfs_url, local_path)
-        self._create_spec_file(name, local_path, image_config['COMMAND'],
-                image_config['CAPABILITIES'])
+        install_rootfs(rootfs_url, local_path)
+        create_spec_file(name, local_path, image_config['COMMAND'],
+                         image_config['CAPABILITIES'])
 
         state['guests'][name] = {
-                'image_name': image_name,
-                'image': image_config,
-                'source_name': source_name,
-                'source': source,
-                'path': local_path,
-                'autostart_enabled': 0,
-            }
+            'image_name': image_name,
+            'image': image_config,
+            'source_name': source_name,
+            'source': source,
+            'path': local_path,
+            'autostart_enabled': 0,
+        }
 
         self._unlock_and_write_state(state)
-        logging.info("Added guest \"%s\" from image \"%s\"" % (name, image))
+        logging.info("Added guest \"%s\" from image \"%s\"", name, image)
 
     def remove_guest(self, name):
         state = self._lock_and_read_state()
         if "guests" not in state:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if name not in state['guests']:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
 
         guest_path = state['guests'][name]['path']
-        logging.debug("Deleting data from \"%s\"..." % (guest_path))
+        logging.debug("Deleting data from \"%s\"...", guest_path)
         shutil.rmtree(guest_path)
         del state['guests'][name]
         self._unlock_and_write_state(state)
-        logging.info("Removed guest \"%s\"" % (name))
+        logging.info("Removed guest \"%s\"", name)
 
     def list_guests(self):
         state = self._lock_and_read_state()
@@ -166,10 +231,10 @@ class OryxSysmgr:
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "guests" not in state:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if name not in state['guests']:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
 
         print(json.dumps(state['guests'][name], indent=4, sort_keys=True))
@@ -177,65 +242,100 @@ class OryxSysmgr:
     def enable_guest(self, name):
         state = self._lock_and_read_state()
         if "guests" not in state:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if name not in state['guests']:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if state['guests'][name]['autostart_enabled'] == 1:
-            logging.error("Guest %s already enabled!" % (name))
+            logging.error("Guest %s already enabled!", name)
             return
 
         state['guests'][name]['autostart_enabled'] = 1
 
         self._unlock_and_write_state(state)
-        logging.info("Enabled guest \"%s\"" % (name))
+        logging.info("Enabled guest \"%s\"", name)
 
     def disable_guest(self, name):
         state = self._lock_and_read_state()
         if "guests" not in state:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if name not in state['guests']:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if state['guests'][name]['autostart_enabled'] == 0:
-            logging.error("Guest %s already disabled!" % (name))
+            logging.error("Guest %s already disabled!", name)
             return
 
         state['guests'][name]['autostart_enabled'] = 0
 
         self._unlock_and_write_state(state)
-        logging.info("Disabled guest \"%s\"" % (name))
+        logging.info("Disabled guest \"%s\"", name)
 
     def start_guest(self, name):
         runc_args = ["run", "-d", name]
         log_path = os.path.join("/var/lib/oryx-guests", name, "log")
 
-        with open(log_path, "a") as f:
+        with open(log_path, "a") as logfile:
             timestamp = datetime.now().isoformat()
-            f.write(">>> Starting guest \"%s\" at %s\n" % (name, timestamp))
-            f.flush()
-            self.runc(name, runc_args, stdin=subprocess.DEVNULL, stdout=f,
-                    stderr=subprocess.STDOUT)
+            logfile.write(">>> Starting guest \"%s\" at %s\n" % (name, timestamp))
+            logfile.flush()
+            self.runc(name, runc_args, stdin=subprocess.DEVNULL, stdout=logfile,
+                      stderr=subprocess.STDOUT)
 
-        logging.info("Started guest \"%s\"" % (name))
+        logging.info("Started guest \"%s\"", name)
 
     def stop_guest(self, name):
         # TODO: Make timeout selectable and poll guest state to see if it has
-        # terminated early
+        # terminated early (https://gitlab.com/oryx/oryx/issues/41)
         timeout = 10
         runc_args = ["kill", name, "TERM"]
         try:
             self.runc(name, runc_args)
-            logging.info("Sent SIGTERM, waiting for %d seconds" % (timeout))
+            logging.info("Sent SIGTERM, waiting for %d seconds", timeout)
             time.sleep(timeout)
-        except:
-            logging.info("Failed to send SIGTERM, deleting guest immediately")
+        except subprocess.CalledProcessError as err:
+            logging.info("Failed to send SIGTERM: %s", err)
+            logging.info("Deleting guest immediately")
 
         runc_args = ["delete", "-f", name]
         self.runc(name, runc_args)
-        logging.info("Stopped guest \"%s\"" % (name))
+        logging.info("Stopped guest \"%s\"", name)
+
+    def preconfigure(self):
+        if os.path.exists('/var/lib/oryx-guests/preconfigure-done'):
+            logging.debug("Preconfiguration already done")
+            return
+
+        logging.debug("Preconfiguration needed")
+        os.makedirs("/var/lib/oryx-guests", exist_ok=True)
+        open('/var/lib/oryx-guests/preconfigure-done', 'w').close()
+
+        logging.debug("Loading preconfiguration data...")
+        preconfig = configparser.ConfigParser()
+        conf_list = os.listdir('/usr/share/oryx/preconfig.d')
+        conf_list.sort()
+        for fname in conf_list:
+            path = os.path.join('/usr/share/oryx/preconfig.d', fname)
+            preconfig.read(path)
+
+        logging.debug("Setting up sources...")
+        for section in preconfig.sections():
+            if section.startswith('source:'):
+                name = section.split(':', 1)[1]
+                url = preconfig.get(section, 'url')
+                self.add_source(name, url)
+
+        logging.debug("Setting up guests...")
+        for section in preconfig.sections():
+            if section.startswith('guest:'):
+                name = section.split(':', 1)[1]
+                image = preconfig.get(section, 'image')
+                enable = preconfig.get(section, 'enable')
+                self.add_guest(name, image)
+                if enable.lower() in ['true', 'yes', '1']:
+                    self.enable_guest(name)
 
     def autostart_all(self):
         state = self._lock_and_read_state()
@@ -251,10 +351,10 @@ class OryxSysmgr:
                 try:
                     self.start_guest(name)
                     count_success += 1
-                except:
-                    logging.error("Failed to start guest \"%s\"" % (name))
+                except subprocess.CalledProcessError as err:
+                    logging.error("Failed to start guest \"%s\": %s", name, err)
 
-        logging.info("Started %d of %d enabled guests" % (count_success, count))
+        logging.info("Started %d of %d enabled guests", count_success, count)
 
     def autostop_all(self):
         state = self._lock_and_read_state()
@@ -267,103 +367,35 @@ class OryxSysmgr:
         for name in state['guests']:
             count += 1
             # TODO: Check if guest is actually running before we try to stop it
+            # (https://gitlab.com/oryx/oryx/issues/42)
             try:
                 self.stop_guest(name)
                 count_success += 1
-            except:
-                logging.info("Failed to stop guest \"%s\", it probably wasn't running" % (name))
+            except subprocess.CalledProcessError as err:
+                logging.info("Failed to stop guest \"%s\": %s", name, err)
 
-        logging.info("Stopped %d of %d guests" % (count_success, count))
+        logging.info("Stopped %d of %d guests", count_success, count)
+
+    def startup(self):
+        self.preconfigure()
+        self.autostart_all()
+
+    def shutdown(self):
+        self.autostop_all()
 
     def runc(self, name, runc_args, **kwargs):
         state = self._lock_and_read_state()
         self._unlock_and_discard_state()
         if "guests" not in state:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
         if name not in state['guests']:
-            logging.error("Guest %s not defined!" % (name))
+            logging.error("Guest %s not defined!", name)
             return
 
         local_path = os.path.join("/var/lib/oryx-guests", name)
         args = ["runc"] + runc_args
         subprocess.run(args, cwd=local_path, check=True, **kwargs)
-
-    def _get_image_config(self, image_root):
-        image_url = os.path.join(image_root, "image.json")
-
-        logging.debug("Retrieving \"%s\"..." % (image_url))
-        image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
-        return json.loads(image_json)
-
-    def _install_rootfs(self, rootfs_url, local_path):
-        rootfs_path = os.path.join(local_path, "rootfs")
-
-        logging.debug("Retrieving \"%s\"..." % (rootfs_url))
-        (rootfs_filename, rootfs_headers) = urllib.request.urlretrieve(rootfs_url)
-        logging.debug("Extracting to \"%s\"..." % (rootfs_path))
-        with tarfile.open(rootfs_filename, mode="r:xz") as tf:
-            tf.extractall(rootfs_path)
-        urllib.request.urlcleanup()
-
-    def _create_spec_file(self, name, local_path, command, capabilities):
-        spec_path = os.path.join(local_path, "config.json")
-        logging.debug("Creating spec file \"%s\"..." % (spec_path))
-        subprocess.run(["runc", "spec"], cwd=local_path, check=True)
-        spec_file = open(spec_path, 'r+')
-        spec = json.load(spec_file)
-
-        # Add netns hook
-        if not "hooks" in spec:
-            spec['hooks'] = {}
-        if not "prestart" in spec["hooks"]:
-            spec['hooks']['prestart'] = []
-        netns_hook = {'path': '/usr/sbin/netns'}
-        spec['hooks']['prestart'].append(netns_hook)
-
-        # Make rootfs writable
-        spec['root']['readonly'] = False
-
-        # Set hostname to the container name
-        spec['hostname'] = name
-
-        # Use dumb-init as PID 1 within the container and have this program
-        # launch the desired command
-        command_args = shlex.split(command)
-        spec['process']['args'] = ['/sbin/dumb-init'] + command_args
-        spec['process']['terminal'] = False
-
-        # Define the capability sets for the container
-        spec['process']['capabilities']['effective'] = capabilities
-        spec['process']['capabilities']['bounding'] = capabilities
-        spec['process']['capabilities']['inheritable'] = capabilities
-        spec['process']['capabilities']['permitted'] = capabilities
-        spec['process']['capabilities']['ambient'] = capabilities
-
-        # Add tmpfs mounts
-        spec['mounts'].append({
-            "destination": "/run",
-            "type": "tmpfs",
-            "source": "tmpfs",
-            "options": [
-                "mode=0755",
-                "nodev",
-                "nosuid",
-                "strictatime"
-                ]
-            })
-        spec['mounts'].append({
-            "destination": "/var/volatile",
-            "type": "tmpfs",
-            "source": "tmpfs"
-            })
-
-        # Write back the updated spec
-        spec_file.seek(0)
-        spec_file.truncate()
-        json.dump(spec, spec_file, indent=4)
-        spec_file.write("\n")
-        spec_file.close()
 
     def _lock_and_read_state(self):
         try:
@@ -371,8 +403,9 @@ class OryxSysmgr:
             self.statefile = open('/var/lib/oryx-guests/state', 'r+')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return json.load(self.statefile)
-        except:
-            logging.debug("No existing state found. Creating blank state...")
+        except OSError as err:
+            logging.debug("Existing state cannot be opened: %s", err)
+            logging.debug("Creating blank state...")
             os.makedirs("/var/lib/oryx-guests", exist_ok=True)
             self.statefile = open('/var/lib/oryx-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
@@ -460,7 +493,7 @@ class OryxCmd(cmd.Cmd):
         """
 
         args = line.split()
-        if len(args) != 0:
+        if args:
             logging.error("Incorrect number of args!")
             return
         self.sysmgr.list_sources()
@@ -552,7 +585,7 @@ class OryxCmd(cmd.Cmd):
         """
 
         args = line.split()
-        if len(args) != 0:
+        if args:
             logging.error("Incorrect number of args!")
             return
         self.sysmgr.list_guests()
@@ -668,6 +701,27 @@ class OryxCmd(cmd.Cmd):
         name = args[0]
         self.sysmgr.stop_guest(name)
 
+    def do_preconfigure(self, line):
+        """
+        preconfigure
+
+        Read pre-configuration data from `/usr/share/oryx/preconfig.d` and
+        add the listed sources and guests.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            preconfigure
+        """
+        args = line.split()
+        if args:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.preconfigure()
+
     def do_autostart_all(self, line):
         """
         autostart_all
@@ -683,7 +737,7 @@ class OryxCmd(cmd.Cmd):
             autostart_all
         """
         args = line.split()
-        if len(args) != 0:
+        if args:
             logging.error("Incorrect number of args!")
             return
         self.sysmgr.autostart_all()
@@ -703,10 +757,52 @@ class OryxCmd(cmd.Cmd):
             autostop_all
         """
         args = line.split()
-        if len(args) != 0:
+        if args:
             logging.error("Incorrect number of args!")
             return
         self.sysmgr.autostop_all()
+
+    def do_startup(self, line):
+        """
+        startup
+
+        Convenience function for use in systemd service file. Runs
+        'preconfigure' then 'autostart_all'.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            startup
+        """
+        args = line.split()
+        if args:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.startup()
+
+    def do_shutdown(self, line):
+        """
+        shutdown
+
+        Convenience function for use in systemd service file. Runs
+        'autostop_all'.
+
+        Arguments:
+
+            (none)
+
+        Example:
+
+            shutdown
+        """
+        args = line.split()
+        if args:
+            logging.error("Incorrect number of args!")
+            return
+        self.sysmgr.shutdown()
 
     def do_runc(self, line):
         """
@@ -728,7 +824,7 @@ class OryxCmd(cmd.Cmd):
             runc test spec
         """
         args = line.split()
-        if len(args) < 1:
+        if not args:
             logging.error("Incorrect number of args!")
             return
         name = args[0]
@@ -736,7 +832,7 @@ class OryxCmd(cmd.Cmd):
 
         self.sysmgr.runc(name, runc_args)
 
-    def do_version(self, line):
+    def do_version(self, _):
         """
         version
 
@@ -744,7 +840,7 @@ class OryxCmd(cmd.Cmd):
         """
         print("%s (%s)" % (APP_NAME, VERSION_STRING))
 
-    def do_exit(self, line):
+    def do_exit(self, _):
         """
         exit
 
@@ -760,7 +856,7 @@ class OryxCmd(cmd.Cmd):
         print("    -h/--help [topic]    Print help and exit")
         print("    -V/--version         Print version string and exit")
 
-if __name__ == '__main__':
+def main():
     # oryxcmd is typically used interactively so keep log messages simple
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
@@ -782,3 +878,6 @@ if __name__ == '__main__':
         oryxcmd.onecmd(line)
     else:
         oryxcmd.cmdloop()
+
+if __name__ == '__main__':
+    main()

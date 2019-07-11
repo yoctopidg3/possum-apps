@@ -1,4 +1,8 @@
 #! /bin/bash
+#
+# Copyright (C) 2017 Togán Labs
+# SPDX-License-Identifier: MIT
+#
 
 set -e
 set -o pipefail
