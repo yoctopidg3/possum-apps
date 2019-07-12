@@ -29,7 +29,7 @@ APP_NAME = "oryxcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
 def get_image_config(image_root):
-    image_url = os.path.join(image_root, "image.json")
+    image_url = os.path.join(image_root, "image_guest.json")
 
     logging.debug("Retrieving \"%s\"...", image_url)
     image_json = urllib.request.urlopen(image_url).read().decode('utf-8')
