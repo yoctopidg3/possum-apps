@@ -72,7 +72,9 @@ class OryxTests(OryxTestCase):
         # We need to reset into a clean state to remove any sources and guests
         # added by preconfiguration.
         self.assertRunSuccess('oryxcmd shutdown')
+        self.assertRunSuccess('netns rm')
         shutil.rmtree('/var/lib/oryx-guests')
+        shutil.rmtree('/run/github.com/genuinetools/netns')
 
         # Check no sources are registered at first
         rc = self.assertRunSuccess('oryxcmd list_sources', capture=True)
