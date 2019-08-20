@@ -2,7 +2,7 @@
 #
 # oryxcmd
 #
-# Copyright (C) 2017-2018 Togán Labs
+# Copyright (C) 2017-2019 Togán Labs
 # SPDX-License-Identifier: MIT
 #
 
