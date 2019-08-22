@@ -2,7 +2,7 @@
 #
 # oryxcmd
 #
-# Copyright (C) 2017-2018 Togán Labs
+# Copyright (C) 2017-2019 Togán Labs
 # SPDX-License-Identifier: MIT
 #
 
@@ -409,7 +409,10 @@ class OryxSysmgr:
             os.makedirs("/var/lib/oryx-guests", exist_ok=True)
             self.statefile = open('/var/lib/oryx-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
-            return {}
+            state = {}
+            json.dump(state, self.statefile, indent=4)
+            self.statefile.write("\n")
+            return state
 
     def _unlock_and_write_state(self, state):
         logging.debug("Writing back state...")
