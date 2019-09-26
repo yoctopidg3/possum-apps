@@ -308,6 +308,10 @@ class OryxSysmgr:
             logging.debug("Preconfiguration already done")
             return
 
+        if not os.path.exists('/usr/share/oryx/preconfig.d'):
+            logging.debug("No preconfiguration data")
+            return
+
         logging.debug("Preconfiguration needed")
         os.makedirs("/var/lib/oryx-guests", exist_ok=True)
         open('/var/lib/oryx-guests/preconfigure-done', 'w').close()
