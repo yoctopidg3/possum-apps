@@ -180,7 +180,7 @@ class OryxSysmgr:
         image_root = os.path.join(source['url'], 'guest', image_name)
         image_config = get_image_config(image_root)
 
-        if image_config['SYSTEM_PROFILE'] != 'guest':
+        if image_config['SYSTEM_PROFILE_TYPE'] != 'guest':
             logging.error("Image \"%s\" is not a valid guest image!", image)
             return
 
