@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 #
-# oryxcmd
+# possumcmd
 #
 # Copyright (C) 2017-2019 Togán Labs
 # SPDX-License-Identifier: MIT
@@ -25,7 +25,7 @@ import urllib.request
 
 from datetime import datetime
 
-APP_NAME = "oryxcmd"
+APP_NAME = "possumcmd"
 VERSION_STRING = "%%VERSION_STRING%%"
 
 def get_image_config(image_root):
@@ -104,7 +104,7 @@ def create_spec_file(name, local_path, command, capabilities):
     spec_file.write("\n")
     spec_file.close()
 
-class OryxSysmgr:
+class PossumSysmgr:
     def __init__(self):
         self.statefile = None
 
@@ -185,7 +185,7 @@ class OryxSysmgr:
             return
 
         rootfs_url = os.path.join(image_root, image_config['ROOTFS'])
-        local_path = os.path.join("/var/lib/oryx-guests", name)
+        local_path = os.path.join("/var/lib/possum-guests", name)
         install_rootfs(rootfs_url, local_path)
         create_spec_file(name, local_path, image_config['COMMAND'],
                          image_config['CAPABILITIES'])
@@ -275,7 +275,7 @@ class OryxSysmgr:
 
     def start_guest(self, name):
         runc_args = ["run", "-d", name]
-        log_path = os.path.join("/var/lib/oryx-guests", name, "log")
+        log_path = os.path.join("/var/lib/possum-guests", name, "log")
 
         with open(log_path, "a") as logfile:
             timestamp = datetime.now().isoformat()
@@ -288,7 +288,7 @@ class OryxSysmgr:
 
     def stop_guest(self, name):
         # TODO: Make timeout selectable and poll guest state to see if it has
-        # terminated early (https://gitlab.com/oryx/oryx/issues/41)
+        # terminated early (https://gitlab.com/possum/possum/issues/41)
         timeout = 10
         runc_args = ["kill", name, "TERM"]
         try:
@@ -304,24 +304,24 @@ class OryxSysmgr:
         logging.info("Stopped guest \"%s\"", name)
 
     def preconfigure(self):
-        if os.path.exists('/var/lib/oryx-guests/preconfigure-done'):
+        if os.path.exists('/var/lib/possum-guests/preconfigure-done'):
             logging.debug("Preconfiguration already done")
             return
 
-        if not os.path.exists('/usr/share/oryx/preconfig.d'):
+        if not os.path.exists('/usr/share/possum/preconfig.d'):
             logging.debug("No preconfiguration data")
             return
 
         logging.debug("Preconfiguration needed")
-        os.makedirs("/var/lib/oryx-guests", exist_ok=True)
-        open('/var/lib/oryx-guests/preconfigure-done', 'w').close()
+        os.makedirs("/var/lib/possum-guests", exist_ok=True)
+        open('/var/lib/possum-guests/preconfigure-done', 'w').close()
 
         logging.debug("Loading preconfiguration data...")
         preconfig = configparser.ConfigParser()
-        conf_list = os.listdir('/usr/share/oryx/preconfig.d')
+        conf_list = os.listdir('/usr/share/possum/preconfig.d')
         conf_list.sort()
         for fname in conf_list:
-            path = os.path.join('/usr/share/oryx/preconfig.d', fname)
+            path = os.path.join('/usr/share/possum/preconfig.d', fname)
             preconfig.read(path)
 
         logging.debug("Setting up sources...")
@@ -371,7 +371,7 @@ class OryxSysmgr:
         for name in state['guests']:
             count += 1
             # TODO: Check if guest is actually running before we try to stop it
-            # (https://gitlab.com/oryx/oryx/issues/42)
+            # (https://gitlab.com/possum/possum/issues/42)
             try:
                 self.stop_guest(name)
                 count_success += 1
@@ -397,21 +397,21 @@ class OryxSysmgr:
             logging.error("Guest %s not defined!", name)
             return
 
-        local_path = os.path.join("/var/lib/oryx-guests", name)
+        local_path = os.path.join("/var/lib/possum-guests", name)
         args = ["runc"] + runc_args
         subprocess.run(args, cwd=local_path, check=True, **kwargs)
 
     def _lock_and_read_state(self):
         try:
             logging.debug("Loading state...")
-            self.statefile = open('/var/lib/oryx-guests/state', 'r+')
+            self.statefile = open('/var/lib/possum-guests/state', 'r+')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             return json.load(self.statefile)
         except OSError as err:
             logging.debug("Existing state cannot be opened: %s", err)
             logging.debug("Creating blank state...")
-            os.makedirs("/var/lib/oryx-guests", exist_ok=True)
-            self.statefile = open('/var/lib/oryx-guests/state', 'w')
+            os.makedirs("/var/lib/possum-guests", exist_ok=True)
+            self.statefile = open('/var/lib/possum-guests/state', 'w')
             fcntl.lockf(self.statefile, fcntl.LOCK_EX)
             state = {}
             json.dump(state, self.statefile, indent=4)
@@ -430,11 +430,11 @@ class OryxSysmgr:
         logging.debug("Discarding state (read-only command)...")
         self.statefile.close()
 
-class OryxCmd(cmd.Cmd):
+class PossumCmd(cmd.Cmd):
     intro = "Welcome to %s (%s)" % (APP_NAME, VERSION_STRING)
-    prompt = "oryxcmd> "
+    prompt = "possumcmd> "
     def __init__(self):
-        self.sysmgr = OryxSysmgr()
+        self.sysmgr = PossumSysmgr()
         super().__init__()
 
     def do_add_source(self, line):
@@ -452,7 +452,7 @@ class OryxCmd(cmd.Cmd):
 
         Example:
 
-            add_source oryx https://downloads.toganlabs.com/oryx/0.2/guests
+            add_source possum https://downloads.toganlabs.com/possum/0.2/guests
         """
 
         args = line.split()
@@ -474,7 +474,7 @@ class OryxCmd(cmd.Cmd):
 
         Example:
 
-            remove_source oryx
+            remove_source possum
         """
 
         args = line.split()
@@ -517,7 +517,7 @@ class OryxCmd(cmd.Cmd):
 
         Example:
 
-            show_source oryx
+            show_source possum
         """
 
         args = line.split()
@@ -544,7 +544,7 @@ class OryxCmd(cmd.Cmd):
 
         Example:
 
-            add_guest test oryx:minimal
+            add_guest test possum:minimal
         """
         args = line.split()
         if len(args) != 2:
@@ -712,7 +712,7 @@ class OryxCmd(cmd.Cmd):
         """
         preconfigure
 
-        Read pre-configuration data from `/usr/share/oryx/preconfig.d` and
+        Read pre-configuration data from `/usr/share/possum/preconfig.d` and
         add the listed sources and guests.
 
         Arguments:
@@ -851,7 +851,7 @@ class OryxCmd(cmd.Cmd):
         """
         exit
 
-        Exit the interactive oryxcmd shell.
+        Exit the interactive possumcmd shell.
         """
         return True
 
@@ -864,7 +864,7 @@ class OryxCmd(cmd.Cmd):
         print("    -V/--version         Print version string and exit")
 
 def main():
-    # oryxcmd is typically used interactively so keep log messages simple
+    # possumcmd is typically used interactively so keep log messages simple
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     # Really dumb handling for '-v'/'--verbose' argument
@@ -873,7 +873,7 @@ def main():
             logging.getLogger().setLevel(logging.DEBUG)
             del sys.argv[1]
 
-    oryxcmd = OryxCmd()
+    possumcmd = PossumCmd()
     if len(sys.argv) > 1:
         # Convert common option-style arguments into commands
         if sys.argv[1] in ("-h", "--help"):
@@ -882,9 +882,9 @@ def main():
             sys.argv[1] = "version"
 
         line = ' '.join(sys.argv[1:])
-        oryxcmd.onecmd(line)
+        possumcmd.onecmd(line)
     else:
-        oryxcmd.cmdloop()
+        possumcmd.cmdloop()
 
 if __name__ == '__main__':
     main()
